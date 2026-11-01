@@ -1,0 +1,44 @@
+{
+  "name": "dsh-lattice-memory",
+  "version": "0.1.0",
+  "description": "Lattice — cross-project, version-aware project memory for DeepSeek Harness. One shared memory library: entries are Markdown files tagged with project dimensions (versions, loaders, platforms, branches). First-run setup picks the library folder; retrieval and resident injection arrive in later milestones.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "PLAN.md"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "memory",
+    "project-memory",
+    "lattice"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-tools": "^0.2.1-rc.1",
+    "@deepseek-ai/schemastery": "~3.18.5"
+  }
+}

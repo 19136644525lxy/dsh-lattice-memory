@@ -1,0 +1,12 @@
+# Lattice (dsh-lattice-memory) — bundle mount layer.
+#
+# Installed into a profile with `dsh plugin --profile <name> add <spec>`
+# (or the `plugin_manager` tool's install_bundle). DSH resolves `name` from
+# the profile's node_modules and mounts the plugin's host half; the web client
+# half is assembled from package.json's `dsh.client` block.
+#
+# Deployment switches live in the profile's own cordis.patch.yml on this row
+# (`- id: lattice` + `config:`), not here: user patches survive upgrades.
+- insert:
+    - id: lattice
+      name: dsh-lattice-memory
