@@ -2904,7 +2904,7 @@ async function handlePanelRequest(ctx, config, req, res) {
   if (tail === "/pick-directory" && method === "POST") {
     let result = { ok: true, path: "", hint: "no-directory-picker" };
     try {
-      const picker = (typeof ctx.get === "function" ? ctx.get("directoryPicker") : undefined) || ctx.directoryPicker;
+      const picker = typeof ctx.get === "function" ? ctx.get("directoryPicker") : undefined;
       const capability = picker && typeof picker.capability === "function" ? picker.capability() : null;
       if (capability && capability.kind === "native" && typeof capability.pick === "function") {
         // The native backend reads `signal.aborted`, so it must get a real

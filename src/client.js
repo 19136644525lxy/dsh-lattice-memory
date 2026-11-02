@@ -334,19 +334,34 @@ window.__ModuleLoader__.load({
       const pickFolder = useCallback(async () => {
         setError("");
         try {
-          const workspace = ctx && (ctx.uiWorkspace || (ctx.get && ctx.get("uiWorkspace")));
-          const remote = ctx && (ctx.remote || (ctx.get && ctx.get("remote")));
-          const directoryPicker = remote && remote.directoryPicker;
-          const picked = workspace && typeof workspace.pickDirectory === "function"
-            ? await workspace.pickDirectory()
-            : directoryPicker && typeof directoryPicker.pick === "function"
-              ? await directoryPicker.pick()
-              : null;
-          if (picked === null || picked === undefined) {
-            setShowManual(true);
+          // Preferred: ask the host to open its native directory picker. The
+          // browser half of this plugin cannot read ctx.uiWorkspace directly
+          // (it is not injected into this slot context), so the host route is
+          // the only reliable path.
+          const body = await postJson(API_PICK_DIRECTORY, {});
+          const pickedFromHost = body && typeof body.path === "string" ? body.path.trim() : "";
+          if (pickedFromHost !== "") {
+            await apply({ action: "set", path: pickedFromHost });
             return;
           }
-          await apply({ action: "set", path: picked });
+          // Browse-only hosts (or a host without the picker service): try the
+          // remote directory picker the web client may expose, guarded because
+          // reading an uninjected service property throws.
+          let picked = "";
+          try {
+            const remote = ctx && ctx.remote;
+            const picker = remote && remote.directoryPicker;
+            if (picker && typeof picker.pick === "function") picked = (await picker.pick()) || "";
+          } catch {
+            picked = "";
+          }
+          if (picked !== "") {
+            await apply({ action: "set", path: picked });
+            return;
+          }
+          const reason = body && body.ok === false && body.message ? body.message : "宿主没有开放目录选择器";
+          setError(`目录选择器不可用（${reason}），请手填路径。`);
+          setShowManual(true);
         } catch (err) {
           setError(`目录选择器不可用（${String((err && err.message) || err)}），请手填路径。`);
           setShowManual(true);
