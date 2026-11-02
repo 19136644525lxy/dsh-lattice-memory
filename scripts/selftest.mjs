@@ -50,6 +50,7 @@ import {
   createSessionCaptureTracker,
   errorStem,
 } from "../src/capture.js";
+import { hasLatticePatchRow, stripLatticePatchRows, stripPackageRefs } from "../src/uninstall.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "lattice-selftest-"));
@@ -568,6 +569,40 @@ try {
     assert.equal(ended[0].corrections.length, 1);
     assert.deepEqual(t3.endTurn({ sessionKey: "other", now: 2000 }), []);
     assert.deepEqual(t3.endTurn({ sessionKey: "s3", now: 2100 }), []);
+  });
+
+  check("uninstall strips only the lattice patch row and package references", () => {
+    const yaml = [
+      "- id: ui-chat",
+      "  config:",
+      "    locale: zh-CN",
+      "- id: lattice",
+      "  name: dsh-lattice-memory",
+      "  config:",
+      "    capture:",
+      "      mode: auto",
+      "- id: billion-context",
+      "  name: billion-context",
+      "",
+    ].join("\n");
+    const cleaned = stripLatticePatchRows(yaml);
+    assert.equal(hasLatticePatchRow(cleaned), false);
+    assert.ok(!cleaned.includes("dsh-lattice-memory"), "the lattice row body must be gone");
+    assert.ok(cleaned.includes("- id: ui-chat"));
+    assert.ok(cleaned.includes("- id: billion-context"));
+    assert.equal(hasLatticePatchRow(yaml), true);
+
+    const pkg = JSON.stringify({
+      name: "profile",
+      dependencies: { "dsh-lattice-memory": "link:F:/温迪/dsh-lattice-memory" },
+      dsh: { profile: { bundles: ["billion-context", "dsh-lattice-memory"] } },
+    });
+    const result = stripPackageRefs(pkg);
+    assert.equal(result.changed, true);
+    const parsed = JSON.parse(result.text);
+    assert.equal(Object.prototype.hasOwnProperty.call(parsed.dependencies, "dsh-lattice-memory"), false);
+    assert.deepEqual(parsed.dsh.profile.bundles, ["billion-context"]);
+    assert.equal(stripPackageRefs(result.text).changed, false);
   });
 
   console.log(`\nall ${passed} checks passed (${path.relative(process.cwd(), here) || "."})`);

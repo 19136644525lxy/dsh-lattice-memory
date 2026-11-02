@@ -106,6 +106,7 @@ https://raw.githubusercontent.com/19136644525lxy/dsh-lattice-memory/main/market/
 - **删除**：每条右侧「删除」；勾选多条可「删除所选（N）」；底部「清除记忆库…」是清空全部（30 秒倒计时警告，可取消）。
 - **备份**：可自定义备份目录（留空 = **库根下的 `backups/`**，跟着记忆库目录走）与备份名称；面板显示默认目录、已有备份数，可选择某份备份「恢复」（确认后覆盖同名条目）。
 - **背景图**：没有壁纸插件时，可上传一张本地图片当面板背景（存在宿主，重启后仍在）；装了壁纸插件会自动透传壁纸并压暗。
+- **彻底卸载**：底部「彻底卸载…」会清理 profile 的 lattice 配置行、profile `package.json` 里的插件引用、profile `node_modules` 里的包链接，以及 `<DSH_HOME>/lattice` 状态目录（root.json、捕获队列、背景图等）；**记忆库本身保留**。30 秒倒计时警告，可取消。
 
 ## 条目格式
 
@@ -162,6 +163,17 @@ evidence: ["file:src/main/java/com/example/PotionHandler.java"]
 - 一键备份 = 把库目录快照到 `<backup.dir>/lattice-YYYYMMDD-HHmmss-<名称>/`（含 `entries/*.md`、`projects.json`、`.lattice-root.json`、`manifest.json`），默认保留最近 10 份。
 - 留空目录时默认在**记忆库目录里**（`<库根>/backups`），所以移动或拷贝库目录时会连备份一起带走；还没配置库根时临时退到 `$DSH_HOME/lattice/backups`。
 - 恢复 = 从选中的备份把条目与元数据覆盖回库（只覆盖同名文件，不删备份后新增的条目）。
+
+## 彻底卸载
+
+DSH 自带的「移除插件」只把包从插件列表里摘掉，profile 里残留的 `cordis.patch.yml` 行、`package.json` 的 `dsh-lattice-memory` 引用、`node_modules` 里的链接，以及 `$DSH_HOME/lattice` 状态目录（root.json / 捕获队列 / 背景图）都会留着。彻底卸载会把这些一起清掉，记忆库目录本身不删：
+
+1. 打开面板 → 浏览 tab 底部 → 「彻底卸载…」。
+2. 弹窗会先列计划：profile 路径、patch 里是否有 lattice 行、package.json 是否有插件引用、`node_modules` 里是符号链接还是实体目录、状态目录是否存在。
+3. **30 秒倒计时**内可点「取消」；归零或点「立即卸载」才执行。宿主侧还要求请求带 `confirm: true`，`readOnly: true` 时直接拒绝。
+4. 清完后**完全退出 DSH 桌面端再重新打开**，插件就不会再出现在插件列表里了。
+
+想留着配置（比如以后重装）就手动只删插件、别点彻底卸载；反过来，彻底卸载也会清掉 `root.json`，重装后需要重新选一次库根（记忆库内容还在原目录）。
 
 ## 库目录布局
 

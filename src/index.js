@@ -90,6 +90,7 @@ import {
   resolveBackupDir,
   restoreBackup,
 } from "./backup.js";
+import { performUninstall, planUninstall } from "./uninstall.js";
 
 export const name = "dsh-lattice-memory";
 
@@ -98,7 +99,7 @@ export const inject = ["tools"];
 
 const SECTION_NAME = "dsh-lattice-memory";
 const API_PANEL = "/lattice-panel";
-const PANEL_ENDPOINTS = ["version", "state", "setup", "entries", "entry", "matrix", "export", "import", "compose", "background", "captures", "clear", "delete", "backup", "restore", "pick-directory", "update"];
+const PANEL_ENDPOINTS = ["version", "state", "setup", "entries", "entry", "matrix", "export", "import", "compose", "background", "captures", "clear", "delete", "backup", "restore", "pick-directory", "update", "uninstall"];
 const PANEL_VERSION = "0.1.0-m5";
 const API_STATE = API_PANEL + "/state";
 const API_SETUP = API_PANEL + "/setup";
@@ -117,6 +118,7 @@ const API_BACKUP = API_PANEL + "/backup";
 const API_RESTORE = API_PANEL + "/restore";
 const API_PICK_DIRECTORY = API_PANEL + "/pick-directory";
 const API_UPDATE = API_PANEL + "/update";
+const API_UNINSTALL = API_PANEL + "/uninstall";
 const BODY_LIMIT = 8 * 1024;
 const PANEL_BODY_LIMIT = 256 * 1024;
 const UPDATE_TIMEOUT_MS = 8000;
@@ -2842,6 +2844,40 @@ async function handlePanelRequest(ctx, config, req, res) {
       return;
     }
     sendJson(res, 200, { ok: true, ...result });
+    return;
+  }
+
+  if (tail === "/uninstall" && method === "GET") {
+    sendJson(res, 200, { ok: true, plan: planUninstall() });
+    return;
+  }
+
+  if (tail === "/uninstall" && method === "POST") {
+    let body = {};
+    try {
+      const raw = await readRequestBody(req, BODY_LIMIT);
+      body = raw === "" ? {} : JSON.parse(raw);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: { code: "invalid-json", message: "request body is not valid JSON" } });
+      return;
+    }
+    if (config.readOnly) {
+      sendJson(res, 409, { ok: false, error: { code: "read-only", message: "the plugin runs with readOnly: true; disable it before uninstalling" } });
+      return;
+    }
+    if (body.confirm !== true) {
+      sendJson(res, 400, { ok: false, error: { code: "confirmation-required", message: "POST /lattice-panel/uninstall needs { \"confirm\": true }" } });
+      return;
+    }
+    try {
+      const result = performUninstall({ removeState: body.remove_state !== false });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        error: { code: "uninstall-failed", message: String(error && error.message ? error.message : error) },
+      });
+    }
     return;
   }
 

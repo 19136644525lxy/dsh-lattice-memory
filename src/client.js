@@ -43,6 +43,7 @@ window.__ModuleLoader__.load({
     const API_RESTORE = API + "/restore";
     const API_PICK_DIRECTORY = API + "/pick-directory";
     const API_UPDATE = API + "/update";
+    const API_UNINSTALL = API + "/uninstall";
     const DISMISS_KEY = "dsh-lattice-memory:onboarding-dismissed";
 
     // Captured in apply() so components can reach the host directory picker
@@ -692,6 +693,12 @@ window.__ModuleLoader__.load({
       const [clearBusy, setClearBusy] = useState(false);
       const [clearError, setClearError] = useState("");
       const [clearDone, setClearDone] = useState("");
+      const [uninstallOpen, setUninstallOpen] = useState(false);
+      const [uninstallLeft, setUninstallLeft] = useState(30);
+      const [uninstallBusy, setUninstallBusy] = useState(false);
+      const [uninstallError, setUninstallError] = useState("");
+      const [uninstallDone, setUninstallDone] = useState("");
+      const [uninstallPlan, setUninstallPlan] = useState(null);
       const [selected, setSelected] = useState([]);
       const [pendingDelete, setPendingDelete] = useState([]);
       const [deleteBusy, setDeleteBusy] = useState(false);
@@ -751,6 +758,38 @@ window.__ModuleLoader__.load({
         }
       }, [load]);
 
+      const openUninstall = useCallback(async () => {
+        setUninstallError("");
+        setUninstallDone("");
+        setUninstallOpen(true);
+        try {
+          const body = await getJson(API_UNINSTALL);
+          setUninstallPlan(body.plan || null);
+        } catch (err) {
+          setUninstallPlan(null);
+          setUninstallError(String((err && err.message) || err));
+        }
+      }, []);
+
+      const runUninstall = useCallback(async () => {
+        setUninstallBusy(true);
+        setUninstallError("");
+        try {
+          const body = await postJson(API_UNINSTALL, { confirm: true, remove_state: true });
+          const removed = Array.isArray(body && body.removed) ? body.removed : [];
+          const skipped = Array.isArray(body && body.skipped) ? body.skipped : [];
+          setUninstallDone(
+            `已清理 ${removed.length} 项${skipped.length > 0 ? `，${skipped.length} 项被跳过` : ""}。请完全退出 DSH 桌面端后再重新打开（插件会从列表消失）。`,
+          );
+          if (skipped.length > 0) setUninstallError(`未完成：${skipped.join("；")}`);
+          setUninstallOpen(false);
+        } catch (err) {
+          setUninstallError(String((err && err.message) || err));
+        } finally {
+          setUninstallBusy(false);
+        }
+      }, []);
+
       const toggleSelect = useCallback((id, on) => {
         setSelected((previous) => (on ? (previous.includes(id) ? previous : [...previous, id]) : previous.filter((item) => item !== id)));
       }, []);
@@ -790,6 +829,22 @@ window.__ModuleLoader__.load({
         }, 1000);
         return () => window.clearInterval(timer);
       }, [clearOpen, runClear]);
+
+      useEffect(() => {
+        if (!uninstallOpen) return undefined;
+        setUninstallLeft(30);
+        const timer = window.setInterval(() => {
+          setUninstallLeft((previous) => {
+            if (previous <= 1) {
+              window.clearInterval(timer);
+              runUninstall();
+              return 0;
+            }
+            return previous - 1;
+          });
+        }, 1000);
+        return () => window.clearInterval(timer);
+      }, [uninstallOpen, runUninstall]);
 
       return h(
         "div",
@@ -960,7 +1015,39 @@ window.__ModuleLoader__.load({
             "清除记忆库…",
           ),
         ),
+        h(
+          "div",
+          {
+            style: {
+              border: "1px solid rgba(229,72,77,.4)",
+              borderRadius: 11,
+              padding: "9px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "rgba(229,72,77,.04)",
+            },
+          },
+          h("span", { style: { display: "flex", color: "#e5484d" } }, Icon("alert", 14)),
+          h(
+            "span",
+            { style: { flex: "1 1 auto", fontSize: 11.5, color: C.subtle, lineHeight: 1.5 } },
+            "彻底卸载：清掉 profile 里的 lattice 配置行、package.json 里的插件引用、node_modules 里的链接，以及 <DSH_HOME>/lattice 状态目录（记忆库本身保留）。",
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                openUninstall();
+              },
+              style: { ...buttonStyle("ghost", false), color: "#e5484d", borderColor: "rgba(229,72,77,.5)" },
+            },
+            "彻底卸载…",
+          ),
+        ),
         clearDone !== "" ? h(Notice, null, clearDone) : null,
+        uninstallDone !== "" ? h(Notice, { tone: "warn" }, uninstallDone) : null,
         pendingDelete.length > 0
           ? h(
               "div",
@@ -1068,6 +1155,77 @@ window.__ModuleLoader__.load({
                     "button",
                     { type: "button", onClick: () => runClear(), disabled: clearBusy, style: { ...buttonStyle("primary", clearBusy), background: "#e5484d" } },
                     clearBusy ? "清除中…" : "立即清除",
+                  ),
+                ),
+              ),
+            )
+          : null,
+        uninstallOpen
+          ? h(
+              "div",
+              {
+                style: {
+                  position: "fixed",
+                  inset: 0,
+                  zIndex: 260,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(4,6,10,.55)",
+                },
+              },
+              h(
+                "div",
+                {
+                  style: {
+                    width: 500,
+                    maxWidth: "calc(100% - 40px)",
+                    background: opaquePage(),
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 14,
+                    padding: "18px 20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                    color: C.text,
+                    boxShadow: "0 18px 48px rgba(0,0,0,.4)",
+                  },
+                },
+                h("div", { style: { fontSize: 15, fontWeight: 650 } }, "彻底卸载 Lattice？"),
+                h(
+                  "div",
+                  { style: { fontSize: 12.5, color: C.subtle, lineHeight: 1.65 } },
+                  `将清理插件安装痕迹与状态目录（记忆库本身保留）。${uninstallBusy ? " 正在执行…" : ` 将在 ${uninstallLeft} 秒后自动执行。`}`,
+                ),
+                uninstallPlan
+                  ? h(
+                      "div",
+                      { style: { fontFamily: C.mono, fontSize: 11.5, color: C.muted, lineHeight: 1.7, maxHeight: 170, overflow: "auto" } },
+                      h("div", null, `profile: ${uninstallPlan.profileDir || "（未找到）"}`),
+                      h("div", null, `patch 配置行: ${uninstallPlan.patch ? "有，将删除" : "无"}`),
+                      h("div", null, `package.json 引用: ${uninstallPlan.packageRefs ? "有，将删除" : "无"}`),
+                      h("div", null, `node_modules: ${uninstallPlan.moduleExists ? (uninstallPlan.moduleLink ? "是链接（只删链接）" : "是实体目录（整目录删除）") : "无"}`),
+                      h("div", null, `状态目录: ${uninstallPlan.stateDir}${uninstallPlan.stateExists ? "" : "（不存在）"}`),
+                    )
+                  : h("div", { style: { fontSize: 12, color: C.muted } }, uninstallError !== "" ? "" : "正在读取卸载计划…"),
+                h(
+                  "div",
+                  { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.6 } },
+                  "清完后需要完全退出并重开 DSH 桌面端；重开后插件不再出现在插件列表里。记忆库（F:\\Lattice）不会被删除。",
+                ),
+                uninstallError !== "" ? h(Notice, { tone: "warn" }, uninstallError) : null,
+                h(
+                  "div",
+                  { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
+                  h(
+                    "button",
+                    { type: "button", onClick: () => setUninstallOpen(false), disabled: uninstallBusy, style: buttonStyle("ghost", uninstallBusy) },
+                    "取消",
+                  ),
+                  h(
+                    "button",
+                    { type: "button", onClick: () => runUninstall(), disabled: uninstallBusy, style: { ...buttonStyle("primary", uninstallBusy), background: "#e5484d" } },
+                    uninstallBusy ? "卸载中…" : "立即卸载",
                   ),
                 ),
               ),
