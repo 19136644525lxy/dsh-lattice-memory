@@ -2197,6 +2197,15 @@ window.__ModuleLoader__.load({
           .then(() => setUpdateBusy(false));
       }, []);
 
+      useEffect(() => {
+        if (!updateInfo) return undefined;
+        const timer = window.setTimeout(
+          () => setUpdateInfo(null),
+          updateInfo.hasUpdate ? 15000 : 5000,
+        );
+        return () => window.clearTimeout(timer);
+      }, [updateInfo]);
+
       const reloadUi = useCallback(() => {
         try {
           window.location.reload();
