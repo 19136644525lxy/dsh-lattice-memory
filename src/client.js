@@ -103,6 +103,7 @@ window.__ModuleLoader__.load({
       const [manualPath, setManualPath] = react.useState("");
       const [doneRoot, setDoneRoot] = react.useState("");
       const [hidden, setHidden] = react.useState(false);
+      const [loadError, setLoadError] = react.useState("");
 
       react.useEffect(() => {
         let cancelled = false;
@@ -113,13 +114,33 @@ window.__ModuleLoader__.load({
           };
         }
         fetch(API_STATE, { headers: { Accept: "application/json" } })
-          .then((response) => response.json())
+          .then(async (response) => {
+            if (!response.ok) {
+              let detail = "";
+              try {
+                detail = (await response.text()).slice(0, 180);
+              } catch (err) {
+                detail = "";
+              }
+              const origin =
+                typeof window !== "undefined" && window.location ? window.location.origin : "?";
+              throw new Error(
+                `HTTP ${response.status} from ${API_STATE}` +
+                  (detail !== "" ? ` — ${detail}` : "") +
+                  ` | page origin ${origin}`,
+              );
+            }
+            return response.json();
+          })
           .then((json) => {
             if (!cancelled) setSnapshot(json && json.ok === true ? json : null);
           })
-          .catch(() => {
-            /* no host route (desktop IPC build): stay invisible, lattice_setup still works */
-            if (!cancelled) setSnapshot(null);
+          .catch((err) => {
+            /* No usable host route: surface why instead of staying silently invisible. */
+            if (!cancelled) {
+              setSnapshot(null);
+              setLoadError(String((err && err.message) || err));
+            }
           });
         return () => {
           cancelled = true;
@@ -190,6 +211,7 @@ window.__ModuleLoader__.load({
               right: 24,
               bottom: 24,
               zIndex: 60,
+              pointerEvents: "auto",
               maxWidth: 420,
               padding: "10px 14px",
               borderRadius: 10,
@@ -206,6 +228,48 @@ window.__ModuleLoader__.load({
         );
       }
 
+      if (loadError !== "") {
+        return h(
+          "div",
+          {
+            role: "status",
+            style: {
+              position: "fixed",
+              right: 24,
+              bottom: 24,
+              zIndex: 60,
+              pointerEvents: "auto",
+              width: 380,
+              maxWidth: "calc(100vw - 48px)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: `1px solid ${root.border}`,
+              background: root.surface,
+              color: root.text,
+              fontSize: 13,
+              lineHeight: 1.5,
+              boxShadow: "0 12px 32px rgba(0,0,0,.16)",
+            },
+          },
+          h("div", { style: { fontWeight: 700, fontSize: 14 } }, "Lattice"),
+          h("div", { style: { color: root.muted } }, "读取本地状态接口失败，首启引导暂时不可用。"),
+          h("div", { style: { color: root.muted, fontSize: 12, wordBreak: "break-all" } }, loadError),
+          h(
+            "div",
+            { style: { color: root.muted, fontSize: 12 } },
+            "可以完全退出并重开 DSH 桌面端；或在对话里让我运行 lattice_setup 手动配置库根。",
+          ),
+          h(
+            "div",
+            { style: { display: "flex", gap: 8 } },
+            h("button", { type: "button", onClick: dismiss, style: styleButton(false) }, "关闭"),
+          ),
+        );
+      }
+
       if (snapshot === null) return null;
       if (snapshot.configured === true) return null;
       if (snapshot.onboarding === false) return null;
@@ -215,6 +279,7 @@ window.__ModuleLoader__.load({
         right: 24,
         bottom: 24,
         zIndex: 60,
+        pointerEvents: "auto",
         width: 380,
         maxWidth: "calc(100vw - 48px)",
         display: "flex",

@@ -11,8 +11,8 @@
 已实现：
 
 - DSH 插件骨架：`cordis.patch.yml` bundle 行 + `package.json` 的 `dsh.bundle` / `dsh.client` 声明；无构建步骤（纯 ESM + 手写 web client bundle）。
-- schemastery `Config`：`root` / `onboarding` / `inject` / `projectOverlay` / `staleDays`，非法配置在加载期报错。
-- 首启引导：web 卡片（`shell.overlay`）通过 `GET /lattice/state`、`POST /lattice/setup` 与宿主通信；"选择文件夹…"优先调用 DSH 原生目录选择器（`ctx.uiWorkspace.pickDirectory()`，其次 `ctx.remote.directoryPicker.pick()`），不可用时降级为手动输入路径。
+- schemastery `Config`：`root` / `onboarding` / `debug` / `inject` / `projectOverlay` / `staleDays`，非法配置在加载期报错。
+- 首启引导：web 卡片（`shell.overlay`，右下角）通过 `GET /lattice/state`、`POST /lattice/setup` 与宿主通信；"选择文件夹…"优先调用 DSH 原生目录选择器（`ctx.uiWorkspace.pickDirectory()`，其次 `ctx.remote.directoryPicker.pick()`），不可用时降级为手动输入路径。**2026-11-02 已在 DSH 桌面端实测通过**：选文件夹 → 建库 → 卡片消失，库根 `F:\Lattice`。
 - 库根状态：`<DSH_HOME>/lattice/root.json`；库内标记 `<root>/.lattice-root.json`，可区分"已有 Lattice 库（接管）"与"无关的非空目录（原地初始化）"。
 - 项目画像检测：`lattice_profile` 读取工作区自带元数据（`gradle.properties`、`mods.toml` / `neoforge.mods.toml` / `fabric.mod.json`、`package.json`、`pyproject.toml`、`Cargo.toml`、`AndroidManifest.xml`、git 分支），输出 preset + dims。
 - 工具桩：`lattice_setup` / `lattice_status` / `lattice_profile` / `lattice_search`（检索为 M0 stub，返回库状态），以及常驻提示段（告诉模型库在哪、什么条件才可信）。
@@ -34,8 +34,9 @@ dsh plugin --profile desktop add F:\温迪\dsh-lattice-memory
 安装后重启会话（或让 DSH 重新加载插件），然后：
 
 1. 在对话里让 agent 调用 `lattice_status`，确认 `configured`、`state_dir` 是否符合预期；
-2. 刷新 Web GUI，左下角会出现 **Lattice 首启卡片**（若 `onboarding: true` 且尚未配置库根）；
-3. 点「选择文件夹…」挑一个空目录或已有 Lattice 库，或点「使用默认位置」（`<DSH_HOME>/lattice-library`）。
+2. 完全退出并重开 DSH 桌面端（客户端 bundle 在页面启动时组装，装插件后必须重启；`Ctrl+R` 在桌面端可能不生效）；
+3. 页面右下角会出现 **Lattice 首启卡片**（若 `onboarding: true` 且尚未配置库根）；
+4. 点「选择文件夹…」挑一个空目录或已有 Lattice 库，或点「使用默认位置」（`<DSH_HOME>/lattice-library`）。
 
 > 桌面端若使用 `file://` + IPC 下发前端（没有 `webServer` 服务），HTTP 路由不会挂载，卡片不会出现；此时直接让 agent 调 `lattice_setup` 传路径即可。
 
@@ -48,6 +49,7 @@ dsh plugin --profile desktop add F:\温迪\dsh-lattice-memory
   config:
     root: "D:/Lattice"        # 留空 = 用首启卡片选的库根
     onboarding: true          # 未配置时是否显示首启卡片
+    debug: false              # true = 把首启路由诊断写入 <stateDir>/route-debug.log
     staleDays: 180            # verified_on 超过多少天视为过期
     inject:                   # 预留（M2 常驻索引）
       enabled: true
@@ -57,6 +59,8 @@ dsh plugin --profile desktop add F:\温迪\dsh-lattice-memory
 ```
 
 优先级：`config.root` > 首启结果（`root.json`）。`config.root` 非法（不存在或不是目录）时回退到首启结果。
+
+排查首启卡片问题：把 `debug: true` 写进配置并重启桌面端，卡片每次请求会向 `<stateDir>/route-debug.log`（默认 `~/.dsh/lattice/route-debug.log`）追加一行 JSON，含 `method/url/host/origin/admitted/code/connection`；`admitted: true` 表示已过 DSH 信任栅栏。
 
 ## 工具
 

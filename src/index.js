@@ -12,6 +12,8 @@
  */
 import z from "@deepseek-ai/schemastery";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   defaultRoot,
   dshHome,
@@ -61,6 +63,10 @@ export const Config = z
       .boolean()
       .default(true)
       .description("Show the first-run setup card in the web UI while no library root is configured."),
+    debug: z
+      .boolean()
+      .default(false)
+      .description("Write onboarding route diagnostics to <stateDir>/route-debug.log."),
     inject: z
       .object({
         enabled: z.boolean().default(true).description("Reserved (M2): inject a small resident index section."),
@@ -95,6 +101,7 @@ function resolveConfig(raw) {
   return {
     root: typeof value.root === "string" ? value.root.trim() : "",
     onboarding: value.onboarding !== false,
+    debug: value.debug === true,
     inject: {
       enabled: injected.enabled !== false,
       topK: wholeNumber(injected.topK, DEFAULTS.topK, 1),
@@ -432,19 +439,57 @@ function readRequestBody(req, limit = BODY_LIMIT) {
 /**
  * Browser trust fence: custom routes must go through DSH's admission check,
  * otherwise any web page could read or repoint the memory library.
- * Returns true when the request must be rejected.
+ *
+ * Returns `{ admitted, code, connection }`: when `admitted` is false the
+ * request must be rejected with `code` (a 401/403 produced by the host, or a
+ * `true` from a throwing check).
  */
-function isRejectedRequest(serviceCtx, req) {
+function evaluateFence(serviceCtx, req) {
+  let connection;
   try {
-    let connection = serviceCtx ? serviceCtx.connection : undefined;
-    if (!connection && serviceCtx && typeof serviceCtx.get === "function") {
+    if (serviceCtx && typeof serviceCtx.get === "function") {
       connection = serviceCtx.get("connection");
     }
-    if (!connection || typeof connection.requestRejection !== "function") return false;
-    const rejection = connection.requestRejection(req);
-    return rejection !== undefined && rejection !== null && rejection !== false;
   } catch (err) {
-    return true;
+    connection = undefined;
+  }
+  if (!connection && serviceCtx) connection = serviceCtx.connection;
+  if (!connection || typeof connection.requestRejection !== "function") {
+    return { admitted: true, code: undefined, connection: "missing" };
+  }
+  try {
+    const rejection = connection.requestRejection(req);
+    if (rejection === undefined || rejection === null || rejection === false) {
+      return { admitted: true, code: undefined, connection: "present" };
+    }
+    return { admitted: false, code: rejection, connection: "present" };
+  } catch (err) {
+    return { admitted: false, code: 403, connection: "threw:" + String((err && err.message) || err) };
+  }
+}
+
+/**
+ * Best-effort diagnostics: one JSON line per onboarding request, written into
+ * the plugin state dir so a broken deployment can be debugged from logs.
+ */
+function recordRoute(req, fence) {
+  try {
+    const dir = stateDir();
+    mkdirSync(dir, { recursive: true });
+    const entry = {
+      at: new Date().toISOString(),
+      method: req.method,
+      url: req.url,
+      host: req.headers.host,
+      origin: req.headers.origin,
+      secFetchSite: req.headers["sec-fetch-site"],
+      admitted: fence.admitted,
+      code: fence.code,
+      connection: fence.connection,
+    };
+    appendFileSync(join(dir, "route-debug.log"), JSON.stringify(entry) + "\n", "utf8");
+  } catch (err) {
+    /* diagnostics must never break the route */
   }
 }
 
@@ -460,9 +505,21 @@ function mountRoutes(ctx, config) {
           kind: "exact",
           path: API_STATE,
           handler: async (req, res) => {
-            if (isRejectedRequest(scoped, req)) {
-              res.writeHead(403);
-              res.end();
+            const fence = evaluateFence(scoped, req);
+            if (config.debug) recordRoute(req, fence);
+            if (!fence.admitted) {
+              sendJson(res, 403, {
+                ok: false,
+                error: {
+                  code: "fence-rejected",
+                  message: `browser trust fence rejected the request (${String(fence.code)})`,
+                },
+                hint: {
+                  host: req.headers.host ?? null,
+                  origin: req.headers.origin ?? null,
+                  connection: fence.connection,
+                },
+              });
               return;
             }
             sendJson(res, 200, stateSnapshot(config));
@@ -477,9 +534,21 @@ function mountRoutes(ctx, config) {
           kind: "exact",
           path: API_SETUP,
           handler: async (req, res) => {
-            if (isRejectedRequest(scoped, req)) {
-              res.writeHead(403);
-              res.end();
+            const fence = evaluateFence(scoped, req);
+            if (config.debug) recordRoute(req, fence);
+            if (!fence.admitted) {
+              sendJson(res, 403, {
+                ok: false,
+                error: {
+                  code: "fence-rejected",
+                  message: `browser trust fence rejected the request (${String(fence.code)})`,
+                },
+                hint: {
+                  host: req.headers.host ?? null,
+                  origin: req.headers.origin ?? null,
+                  connection: fence.connection,
+                },
+              });
               return;
             }
             if ((req.method || "GET").toUpperCase() !== "POST") {

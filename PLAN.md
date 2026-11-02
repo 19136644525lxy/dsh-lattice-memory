@@ -1,7 +1,7 @@
 # Lattice（`dsh-lattice-memory`）设计方案 v2
 
 > 版本：v2.1（2026-11-01）— 依据 2026-11-01 拍板更新（公开发布 / 首启选库根弹窗 / overlay 关闭 / MVP=M0–M3 / 项目仓库已定）
-> 状态：方案定稿，准备开始 M0
+> 状态：M0 已落地并在 DSH 桌面端实测通过（2026-11-02）；下一步 M1（检索）
 > 宿主：DeepSeek Harness 0.2.x（Cordis 插件体系 + bundle 安装）
 > 名字：品牌 **Lattice**，npm 包名 `dsh-lattice-memory`（2026-11-01 查重：registry.npmjs.org 返回 404，未注册；公开发布前再查一次，撞名则改用 scoped 包名 `@<scope>/dsh-lattice-memory`，展示名保持 Lattice）
 > 仓库：**https://github.com/19136644525lxy/dsh-lattice-memory.git**（本机 DSH 网络当前无法直连 github.com：web_fetch 报 `hostname resolves to a non-public IP address`；本地先 `git init`，由用户推送或使用现有远程）
@@ -581,3 +581,16 @@ M0 已按本计划实现并写入本目录（9 个文件，均为新增）：
 4. 再次 `lattice_status` 确认 `configured=true`、`root_source=user|default`、`is_library=true`。
 
 M0 刻意未做：真实检索（M1）、常驻索引注入与矩阵（M2）、写入闭环（M3）、导出与发布（M4–M5）。
+
+### M0 验收结果（2026-11-02，DSH 桌面端）
+
+- 安装：`dsh plugin --profile desktop add F:\温迪\dsh-lattice-memory` 成功；profile `package.json` 出现 `link:F:/温迪/dsh-lattice-memory`，`dsh.profile.bundles` 末尾出现该包；插件 fiber APPLIED，4 个工具进入会话。
+- 排障记录：装好后首启卡片先不出现（页面仍是旧 boot graph，客户端 bundle 未加载）；补上错误上报后卡片可见但报 `HTTP 403 from /lattice/state`；**完全退出并重开 DSH 桌面端**后恢复正常。日志 `GET /lattice/state` 记录 `admitted: true`、`connection: present`，确认 403 只是重启前的旧页面残留。
+- 实测通过项：
+  1. 首启卡片出现在页面右下角，显示默认位置 `C:\Users\...\.dsh\lattice-library`；
+  2. 「选择文件夹…」→ DSH 原生目录选择器 → 选 `F:\Lattice` → `POST /lattice/setup` 成功；
+  3. 库根落盘 `~/.dsh/lattice/root.json`：`{"root":"F:\\Lattice","source":"user"}`（`config.root` 优先于此）；
+  4. 库结构创建：`F:\Lattice\.lattice-root.json`（`{schema:1,name:"lattice"}`）+ `projects.json` + `entries/`；
+  5. 成功后卡片显示"Lattice 已就绪"并自动消失，`configured=true`。
+- 修正项：`shell.overlay` 条目默认 click-through → 卡片根元素加 `pointerEvents: "auto"`；首启路由诊断写入 `<stateDir>/route-debug.log` 改为 `config.debug` 开关（默认关）。
+- 桌面端 UI 事实：`Ctrl+R` 不生效（需完全退出重开）、`Ctrl+Shift+I` 打不开 DevTools；装/改插件后必须整窗重启。
