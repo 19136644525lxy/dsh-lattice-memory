@@ -6,16 +6,12 @@
  * `manifest.json`. Keeping it as loose files means users can read, diff and
  * restore a backup by hand — no archive format to learn.
  *
- * Default location: `<profile>/backups` — i.e. next to the *installed* plugin
- * entry (`<DSH_HOME>/profiles/<profile>/node_modules/dsh-lattice-memory`),
- * so backups live on the same drive/installation the user actually installed
- * the plugin into (by default a directory under `$DSH_HOME`, which is on the
- * C: drive unless the user moved DSH's home). It deliberately does NOT follow
- * the package directory when the plugin was installed with `link:`: that is
- * the user's project checkout, and backing up there would litter (and
- * git-track) the project. Fallback: `$DSH_HOME/lattice/backups`. Users can
- * point `backup.dir` at any absolute path (or a path relative to the plugin
- * root) from the panel or `cordis.patch.yml`.
+ * Default location: `<library root>/backups` — backups live next to the memory
+ * library they snapshot, so moving or copying the library directory carries its
+ * backups along. Before setup (no library root yet) the fallback is
+ * `$DSH_HOME/lattice/backups`. Users can point `backup.dir` at any absolute
+ * path (or a path relative to the plugin root) from the panel or
+ * `cordis.patch.yml`.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -27,56 +23,36 @@ export const DEFAULT_KEEP = 10;
 export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * Locate the profile that has this plugin installed, i.e.
- * `<DSH_HOME>/profiles/<name>` whose `node_modules/dsh-lattice-memory` entry
- * exists (a `link:` symlink still counts — we only use its parent directory).
- * Returns "" when no profile can be found.
+ * The real directory behind the installed plugin package. With a `link:`
+ * install this resolves to the project checkout; informational only, it is not
+ * used as the backup default anymore.
  */
-export function pluginInstallDir() {
+export function pluginPackageDir() {
   const home = path.dirname(stateDir());
-  const profiles = path.join(home, "profiles");
   try {
-    for (const name of fs.readdirSync(profiles)) {
-      const dir = path.join(profiles, name);
+    for (const name of fs.readdirSync(path.join(home, "profiles"))) {
       try {
-        fs.lstatSync(path.join(dir, "node_modules", "dsh-lattice-memory"));
-        return dir;
+        return fs.realpathSync(path.join(home, "profiles", name, "node_modules", "dsh-lattice-memory"));
       } catch (err) {
-        /* keep looking */
+        /* try the next profile */
       }
     }
   } catch (err) {
     /* no profiles directory */
   }
-  return "";
+  return PLUGIN_ROOT;
 }
 
-/** `<profile>/backups` where the plugin is installed, else `$DSH_HOME/lattice/backups`. */
-export function defaultBackupDir() {
-  const installDir = pluginInstallDir();
-  return installDir === "" ? path.join(stateDir(), "backups") : path.join(installDir, "backups");
-}
-
-/**
- * The real directory behind the installed plugin package. With a `link:`
- * install this resolves to the user's project checkout, which is useful to
- * show in the panel (so the profile path and the checkout path are both
- * visible), but it is deliberately not used as the backup default.
- */
-export function pluginPackageDir() {
-  const installDir = pluginInstallDir();
-  if (installDir === "") return PLUGIN_ROOT;
-  try {
-    return fs.realpathSync(path.join(installDir, "node_modules", "dsh-lattice-memory"));
-  } catch (err) {
-    return PLUGIN_ROOT;
-  }
+/** `<library root>/backups`, or `$DSH_HOME/lattice/backups` before setup. */
+export function defaultBackupDir(root) {
+  const base = typeof root === "string" ? root.trim() : "";
+  return base === "" ? path.join(stateDir(), "backups") : path.join(base, "backups");
 }
 
 /** Resolve a user-supplied directory; relative paths hang off the plugin root. */
-export function resolveBackupDir(value) {
+export function resolveBackupDir(value, root) {
   const raw = typeof value === "string" ? value.trim() : "";
-  if (raw === "") return defaultBackupDir();
+  if (raw === "") return defaultBackupDir(root);
   const expanded = raw === "~" || raw.startsWith("~/") || raw.startsWith("~\\")
     ? path.join(process.env.USERPROFILE || process.env.HOME || "", raw.replace(/^~[\\/]?/, ""))
     : raw;

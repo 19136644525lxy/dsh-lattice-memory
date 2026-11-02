@@ -622,8 +622,9 @@ window.__ModuleLoader__.load({
               "div",
               { style: { color: C.muted, fontSize: 11, lineHeight: 1.6 } },
               `默认目录：${info.defaultDir}`,
-              info.installDir && info.installDir !== "" ? `（插件安装位置：${info.installDir}）` : "",
-              info.packageDir && info.packageDir !== info.installDir && info.packageDir !== info.pluginRoot ? `（插件包实体：${info.packageDir}）` : "",
+              info.libraryConfigured
+                ? "（默认跟随记忆库目录：库根下的 backups/）"
+                : "（还没配置记忆库：先设库根，默认会变成 <库根>/backups）",
             )
           : null,
         info && backups.length === 0

@@ -65,7 +65,7 @@ https://raw.githubusercontent.com/19136644525lxy/dsh-lattice-memory/main/market/
       detectUserCorrections: true
       incidentMinutes: 10
     backup:                   # 备份
-      dir: ""                 # 留空 = <profile>/backups（插件安装位置旁边）
+      dir: ""                 # 留空 = <库根>/backups（跟着记忆库目录走）
       keep: 10
 ```
 
@@ -104,7 +104,7 @@ https://raw.githubusercontent.com/19136644525lxy/dsh-lattice-memory/main/market/
 - **写一条记忆**：手填标题、feature、kind、正文、证据等，直接以 draft 写入库。
 - **刷新**：面板右上角「刷新」会重新读取状态并重挂当前 tab。
 - **删除**：每条右侧「删除」；勾选多条可「删除所选（N）」；底部「清除记忆库…」是清空全部（30 秒倒计时警告，可取消）。
-- **备份**：可自定义备份目录（留空 = 插件安装位置旁边的 `backups/`）与备份名称；面板显示默认目录、插件安装位置、插件包实体、已有备份数，可选择某份备份「恢复」（确认后覆盖同名条目）。
+- **备份**：可自定义备份目录（留空 = **库根下的 `backups/`**，跟着记忆库目录走）与备份名称；面板显示默认目录、已有备份数，可选择某份备份「恢复」（确认后覆盖同名条目）。
 - **背景图**：没有壁纸插件时，可上传一张本地图片当面板背景（存在宿主，重启后仍在）；装了壁纸插件会自动透传壁纸并压暗。
 
 ## 条目格式
@@ -160,7 +160,7 @@ evidence: ["file:src/main/java/com/example/PotionHandler.java"]
 ## 备份
 
 - 一键备份 = 把库目录快照到 `<backup.dir>/lattice-YYYYMMDD-HHmmss-<名称>/`（含 `entries/*.md`、`projects.json`、`.lattice-root.json`、`manifest.json`），默认保留最近 10 份。
-- 留空目录时默认在**插件安装位置旁边**（`<DSH_HOME>/profiles/<profile>/backups`），不跟着你的项目目录走。
+- 留空目录时默认在**记忆库目录里**（`<库根>/backups`），所以移动或拷贝库目录时会连备份一起带走；还没配置库根时临时退到 `$DSH_HOME/lattice/backups`。
 - 恢复 = 从选中的备份把条目与元数据覆盖回库（只覆盖同名文件，不删备份后新增的条目）。
 
 ## 库目录布局
@@ -177,7 +177,7 @@ evidence: ["file:src/main/java/com/example/PotionHandler.java"]
 
 ## 检查更新与热重载
 
-- **检查更新**：面板右上角「检查更新」读取 GitHub 仓库里 `package.json` 的 `version`，与本地比较；模型侧也可以调 `lattice_check_update`。只提示，不会自动安装。
+- **检查更新**：面板右上角「检查更新」读取 GitHub 仓库里 `package.json` 的 `version`，与本地比较；模型侧也可以调 `lattice_check_update`。只提示，不会自动安装。若 HTTPS 直连 `raw.githubusercontent.com` 失败（常见于公司代理做 TLS 拦截：Node 报 `unable to verify the first certificate`），会自动回退到 `git ls-remote` 比对本地与远程提交，提示仍可给出。
 - **重载界面**：插件已更新但页面还是旧 bundle 时，点「重载界面」重新加载页面（不用退出整个桌面端）。
 - **更新步骤**：在 DSH 插件页重装 `github:19136644525lxy/dsh-lattice-memory`（或指定新版 commit）→ 点「重载界面」。host 侧代码在开启 HMR 的 profile 里会热替换；没开 HMR 时仍需完全重开桌面端。
 - 检查地址由配置 `update.repo` / `update.branch` 决定，默认 `19136644525lxy/dsh-lattice-memory` 的 `main` 分支。

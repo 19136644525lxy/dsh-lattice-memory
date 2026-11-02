@@ -31,6 +31,7 @@ import z from "@deepseek-ai/schemastery";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { appendFileSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   defaultRoot,
   dshHome,
@@ -85,7 +86,6 @@ import {
   createBackup,
   defaultBackupDir,
   listBackups,
-  pluginInstallDir,
   pluginPackageDir,
   resolveBackupDir,
   restoreBackup,
@@ -1924,6 +1924,43 @@ function compareSemver(a, b) {
   return left.pre > right.pre ? 1 : -1;
 }
 
+/**
+ * Fallback update channel for networks whose TLS interception breaks Node's
+ * certificate check (corporate proxies): ask git, which uses the OS trust
+ * store, for the remote branch head and compare it with the checked-out
+ * commit. Only works for a git-installed plugin (a `.git` next to `src/`).
+ */
+function gitRemoteHead(repo, branch) {
+  try {
+    const result = spawnSync("git", ["ls-remote", `https://github.com/${repo}.git`, `refs/heads/${branch}`], {
+      timeout: UPDATE_TIMEOUT_MS * 4,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (result.status !== 0 || !result.stdout) return "";
+    const line = result.stdout.trim().split(/\r?\n/)[0] || "";
+    const sha = line.split(/\s+/)[0] || "";
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function readLocalGitHead() {
+  try {
+    const result = spawnSync("git", ["-C", PLUGIN_ROOT, "rev-parse", "HEAD"], {
+      timeout: 5000,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (result.status !== 0 || !result.stdout) return "";
+    const sha = result.stdout.trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : "";
+  } catch (error) {
+    return "";
+  }
+}
+
 async function readRemoteManifest(config) {
   const repo = config.update.repo;
   const branch = config.update.branch;
@@ -1968,12 +2005,40 @@ async function checkForUpdate(config) {
           : `已是最新版本（${current}）。`,
     };
   } catch (error) {
+    const reason = String(error && error.message ? error.message : error);
+    const remoteHead = gitRemoteHead(config.update.repo, config.update.branch);
+    const localHead = readLocalGitHead();
+    if (remoteHead !== "") {
+      const hasUpdate = localHead !== "" && localHead !== remoteHead;
+      const spec = `github:${config.update.repo}${config.update.branch === "main" ? "" : `#${config.update.branch}`}`;
+      return {
+        ok: true,
+        channel: "git",
+        current,
+        latest: hasUpdate ? `git ${remoteHead.slice(0, 7)}` : current,
+        hasUpdate,
+        repo: config.update.repo,
+        branch: config.update.branch,
+        sourceUrl: `https://github.com/${config.update.repo}`,
+        homepage: `https://github.com/${config.update.repo}`,
+        installSpec: spec,
+        localCommit: localHead.slice(0, 7),
+        remoteCommit: remoteHead.slice(0, 7),
+        hint: hasUpdate
+          ? `直连 GitHub raw 失败（${reason}），已改用 git 比对提交：本地 ${localHead.slice(0, 7)}，远程 ${remoteHead.slice(0, 7)}。在 DSH 插件页重装 ${spec}，然后点「重载界面」。`
+          : `已是最新版本（本地与远程同为 ${remoteHead.slice(0, 7)}）。`,
+        note: `raw.githubusercontent.com 不可用，已回退到 git ls-remote 比对提交：${reason}`,
+      };
+    }
     return {
       ok: false,
       current,
       error: {
         code: "update-check-failed",
-        message: String(error && error.message ? error.message : error),
+        message: reason,
+        hint:
+          "检查更新同时尝试了 HTTPS fetch 与 git ls-remote，都失败。常见原因：公司代理做了 TLS 拦截（Node 无法验证证书）、GitHub 不可达，或 git 未安装。" +
+          " 可先在浏览器打开 https://github.com/19136644525lxy/dsh-lattice-memory 确认网络，再用插件页手动重装。",
       },
     };
   }
@@ -2665,7 +2730,15 @@ async function handlePanelRequest(ctx, config, req, res) {
   }
 
   if (tail === "/backup" && method === "GET") {
-    const dir = resolveBackupDir(config.backup.dir);
+    let root = "";
+    let libraryConfigured = false;
+    try {
+      root = activeRootOrThrow(config, "lattice panel");
+      libraryConfigured = true;
+    } catch (error) {
+      root = "";
+    }
+    const dir = resolveBackupDir(config.backup.dir, root);
     let backups = [];
     let problem = "";
     try {
@@ -2676,9 +2749,10 @@ async function handlePanelRequest(ctx, config, req, res) {
     sendJson(res, 200, {
       ok: true,
       pluginRoot: PLUGIN_ROOT,
-      installDir: pluginInstallDir(),
       packageDir: pluginPackageDir(),
-      defaultDir: defaultBackupDir(),
+      root,
+      libraryConfigured,
+      defaultDir: defaultBackupDir(root),
       dir,
       keep: config.backup.keep,
       configured: config.backup.dir,
@@ -2705,7 +2779,7 @@ async function handlePanelRequest(ctx, config, req, res) {
       return;
     }
     const requested = typeof body.dir === "string" && body.dir.trim() !== "" ? body.dir : config.backup.dir;
-    const target = resolveBackupDir(requested);
+    const target = resolveBackupDir(requested, root);
     const keep = (() => {
       const number = Number(body.keep);
       return Number.isFinite(number) && number >= 1 ? Math.floor(number) : config.backup.keep;
@@ -2747,7 +2821,7 @@ async function handlePanelRequest(ctx, config, req, res) {
       sendJson(res, 400, { ok: false, error: { code: "library-not-configured", message: String(error && error.message ? error.message : error) } });
       return;
     }
-    const target = resolveBackupDir(config.backup.dir);
+    const target = resolveBackupDir(config.backup.dir, root);
     try {
       const result = restoreBackup({ root, backupDir: target, name });
       clearEntriesCache();
