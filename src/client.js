@@ -2148,6 +2148,7 @@ window.__ModuleLoader__.load({
       const [entryCount, setEntryCount] = useState(null);
       const [reloadKey, setReloadKey] = useState(0);
       const [updateInfo, setUpdateInfo] = useState(null);
+      const [repairBusy, setRepairBusy] = useState(false);
       const [updateBusy, setUpdateBusy] = useState(false);
       const [updateError, setUpdateError] = useState("");
 
@@ -2213,6 +2214,28 @@ window.__ModuleLoader__.load({
           setUpdateError(String((err && err.message) || err));
         }
       }, []);
+
+      const repairLibrary = useCallback(() => {
+        const root = summary && typeof summary.root === "string" ? summary.root : "";
+        setRepairBusy(true);
+        setHostError("");
+        postJson(API_SETUP, root !== "" ? { action: "set", path: root } : { action: "default" })
+          .then((body) => {
+            if (!body || body.ok !== true) {
+              throw new Error(String((body && (body.message || (body.error && body.error.message))) || "修复失败"));
+            }
+            return getJson(API_STATE);
+          })
+          .then((state) => {
+            if (state && state.ok !== false) {
+              setSummary(state);
+              setEntryCount(Number(state.entries) || 0);
+              setReloadKey((key) => key + 1);
+            }
+          })
+          .catch((err) => setUpdateError(String((err && err.message) || err)))
+          .then(() => setRepairBusy(false));
+      }, [summary]);
 
       return h(
         "div",
@@ -2316,6 +2339,34 @@ window.__ModuleLoader__.load({
               h(Notice, { tone: "warn" },
                 "宿主没有响应 Lattice 面板接口（", h("span", { style: { fontFamily: C.mono, fontSize: 11.5 } }, hostError), "）。",
                 h("div", { style: { marginTop: 4 } }, "请完全退出 DSH 桌面端再打开（不是刷新页面）。若仍出现，说明插件宿主未加载新代码。"),
+              ),
+            )
+          : null,
+        summary && summary.configured && summary.libraryExists === false && summary.root !== ""
+          ? h(
+              "div",
+              { style: { padding: "12px 17px 0" } },
+              h(
+                Notice,
+                { tone: "warn" },
+                "记忆库目录不存在：",
+                h("span", { style: { fontFamily: C.mono, fontSize: 11.5 } }, summary.root),
+                "（可能被移动、改名或所在盘符未挂载）。",
+                h(
+                  "div",
+                  { style: { marginTop: 6, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+                  h(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: repairLibrary,
+                      disabled: repairBusy,
+                      style: buttonStyle("primary", repairBusy),
+                    },
+                    repairBusy ? "重建中…" : "重建库目录",
+                  ),
+                  "重建只会创建空目录与标记文件，不会恢复已删除的条目；想换位置可在配置里改 root 后重开。",
+                ),
               ),
             )
           : null,

@@ -387,11 +387,31 @@ function stateSnapshot(config) {
     root: active.root ?? "",
     rootSource: active.source ?? "",
     isLibrary: library === null ? false : library.isLibrary,
+    libraryExists: library === null ? false : library.exists,
     entries: library === null ? 0 : library.entries,
     onboarding: config.onboarding,
     background: readBackgroundMeta(),
     config,
   };
+}
+
+/**
+ * Self-heal the configured library: if the remembered root is gone (moved,
+ * deleted, or a different machine/drive), recreate its skeleton instead of
+ * leaving the plugin pointing at a missing folder.
+ * Never invents a root when the user has not configured one.
+ */
+function ensureActiveLibrary(config) {
+  const active = resolveActiveRoot(config);
+  if (active.root === null) return { root: null, created: false, repaired: false };
+  const before = inspectLibraryRoot(active.root);
+  if (before.isLibrary) return { root: active.root, created: false, repaired: false };
+  try {
+    ensureLibraryRoot(active.root);
+  } catch {
+    return { root: active.root, created: false, repaired: false };
+  }
+  return { root: active.root, created: !before.exists, repaired: before.exists };
 }
 
 /**
@@ -3495,6 +3515,9 @@ export function apply(ctx, rawConfig) {
   }
   bootLog(`apply: start (panel ${PANEL_VERSION})`);
   try {
+    const healed = ensureActiveLibrary(config);
+    if (healed.created) bootLog(`library: recreated missing root ${healed.root}`);
+    else if (healed.repaired) bootLog(`library: repaired skeleton at ${healed.root}`);
     const tools = [
       setupTool(config),
       statusTool(config),
