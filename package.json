@@ -1,7 +1,7 @@
 {
   "name": "dsh-lattice-memory",
   "version": "0.1.0",
-  "description": "Lattice — cross-project, version-aware project memory for DeepSeek Harness. One shared memory library: entries are Markdown files tagged with project dimensions (versions, loaders, platforms, branches). First-run setup picks the library folder; M1 retrieval (BM25 + CJK bigrams + dimension filtering), M2 resident injection + matrix/gaps, M3 write loop (record/verify/jaccard dedupe/secret scan/lint), M4 generality (projects.json workspace overrides + entry cache), M5 export/import (JSON, SKILL.md, AGENTS.md) plus a settings panel, M6 semi-automatic capture (tool failure -> retry success candidates), and M7 automatic capture (human corrections via session/event + turn-end failure chains) ship in this version.",
+  "description": "Lattice — cross-project, version-aware project memory for DeepSeek Harness. One shared memory library: entries are Markdown files tagged with project dimensions (versions, loaders, platforms, branches). First-run setup picks the library folder; retrieval (BM25 + CJK bigrams + dimension filtering), resident injection + matrix/gaps, write loop (record/verify/jaccard dedupe/secret scan/lint), projects.json workspace overrides, export/import (JSON, SKILL.md, AGENTS.md) with a full-screen panel, semi-automatic + automatic capture, backup/restore and update checking ship in this version.",
   "type": "module",
   "main": "src/index.js",
   "exports": {

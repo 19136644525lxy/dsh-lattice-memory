@@ -6,28 +6,28 @@
 
 ## 安装
 
-在 DSH 里用本地路径安装（按你的 DSH 版本二选一）：
+1. 打开 DSH → **插件（Plugins）** → **添加插件**；
+2. 输入本仓库地址：
 
-```bash
-# 方式 A：DSH CLI
-dsh plugin --profile desktop add <插件目录绝对路径>
+   ```
+   github:19136644525lxy/dsh-lattice-memory
+   ```
 
-# 方式 B：让 DSH 里的 agent 调用 plugin_manager 的 install_bundle，
-# target 传同一个绝对路径
+   （也可以填 `https://github.com/19136644525lxy/dsh-lattice-memory` 或带版本的 `github:19136644525lxy/dsh-lattice-memory#main`）
+3. 安装完成后**完全退出并重开 DSH 桌面端**（客户端 bundle 在页面启动时组装，桌面端 `Ctrl+R` 不一定生效）。
+4. 在对话里让 agent 调 `lattice_status`，能返回状态即安装成功。
+
+> 如果「添加插件」里找不到入口，也可以用命令行：`dsh plugin --profile desktop add github:19136644525lxy/dsh-lattice-memory`，或让 agent 调用 `plugin_manager` 的 `install_bundle`，`target` 传 `github:19136644525lxy/dsh-lattice-memory`。
+
+### 从插件市场索引安装（可选，可被搜索到）
+
+想让用户在 DSH 的「发现 / Discover」里搜索到 Lattice 时，用**市场索引**方式：把下面这个地址作为「插件市场索引」添加：
+
+```
+https://raw.githubusercontent.com/19136644525lxy/dsh-lattice-memory/main/market/index.json
 ```
 
-装完**完全退出并重开 DSH 桌面端**（客户端 bundle 在页面启动时组装，桌面端 `Ctrl+R` 不一定生效）。
-
-### 从插件市场安装（可选）
-
-本仓库自带一个插件市场索引 `market/index.json`（Git 源），用户不需要 npm 账号即可搜索安装：
-
-1. 打开 DSH → Plugins → Discover → 添加索引地址：
-   `https://raw.githubusercontent.com/<用户名>/<仓库名>/main/market/index.json`
-2. 搜索 `Lattice` → 安装；
-3. 完全重开桌面端 → `lattice_status` 确认工具已就绪。
-
-> 索引里的版本按 `source.type: "git"` + 完整 commit SHA 固定，发新版时要同步更新 `commit`；仓库必须公开。
+索引里每个版本用 `source: { type: "git", url, commit }` 锁定到仓库的某个提交，安装时按该提交拉取，不随 `main` 漂移。**发布新版本后**需要改 `market/index.json` 里的 `version`、`publishTimestamp` 与 `source.commit`（用 `git rev-parse origin/main` 得到的完整 40 位 SHA），再 push。若宿主提示索引无效，先确认上面的 raw 地址能在浏览器直接打开、内容是合法 JSON。
 
 ## 首次使用
 
@@ -175,12 +175,19 @@ evidence: ["file:src/main/java/com/example/PotionHandler.java"]
 <DSH_HOME>/lattice/    # 插件状态（不是记忆库）：root.json、background.bin、captures.json、boot.log …
 ```
 
+## 检查更新与热重载
+
+- **检查更新**：面板右上角「检查更新」读取 GitHub 仓库里 `package.json` 的 `version`，与本地比较；模型侧也可以调 `lattice_check_update`。只提示，不会自动安装。
+- **重载界面**：插件已更新但页面还是旧 bundle 时，点「重载界面」重新加载页面（不用退出整个桌面端）。
+- **更新步骤**：在 DSH 插件页重装 `github:19136644525lxy/dsh-lattice-memory`（或指定新版 commit）→ 点「重载界面」。host 侧代码在开启 HMR 的 profile 里会热替换；没开 HMR 时仍需完全重开桌面端。
+- 检查地址由配置 `update.repo` / `update.branch` 决定，默认 `19136644525lxy/dsh-lattice-memory` 的 `main` 分支。
+
 ## 故障排查
 
 - **面板报"宿主没有响应"或 404**：先完全退出再重开桌面端；仍不行看 `<DSH_HOME>/lattice/boot.log`（每次加载会记录 `apply: start` / `panel: registered …` / 异常栈）。
 - **首启卡片不出现**：确认 `onboarding: true` 且没配过库根；桌面端没有 `webServer` 时改用 `lattice_setup(path=...)`。
 - **首启/卡片请求异常**：配置里临时开 `debug: true`，请求记录会写到 `<DSH_HOME>/lattice/route-debug.log`（`admitted: true` 表示已过 DSH 信任栅栏）。
-- **改了插件代码不生效**：宿主与客户端都要重新加载——完全退出并重开桌面端。
+- **改了插件代码不生效**：先在面板点「重载界面」（client bundle 重新加载）；host 侧代码需要 HMR 开启才会热替换，否则完全退出并重开桌面端。
 
 ## 许可
 

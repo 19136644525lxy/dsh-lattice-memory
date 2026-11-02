@@ -16,3 +16,16 @@ PLAN.md
 
 # Sample entries used while developing: local templates, not published
 examples/
+
+# Local / machine-specific files
+.env
+.env.*
+.vscode/
+.idea/
+*.tmp
+*.bak
+*.zip
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json

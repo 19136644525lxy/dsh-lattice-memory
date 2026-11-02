@@ -1,14 +1,14 @@
 /**
  * Lattice (dsh-lattice-memory) — host half.
  *
- * Cross-project, version-aware project memory for DSH. Current scope (M0–M7):
+ * Cross-project, version-aware project memory for DSH. Current scope (M0–M8):
  *   - bundle skeleton + schemastery Config;
  *   - library root state (`<DSH_HOME>/lattice/root.json`) and validation;
  *   - first-run onboarding: web routes for the client card + `lattice_setup`;
  *   - tools: lattice_status / lattice_profile / lattice_setup / lattice_search /
  *     lattice_get / lattice_list / lattice_matrix / lattice_gaps / lattice_brief /
  *     lattice_record / lattice_verify / lattice_lint / lattice_export /
- *     lattice_import / lattice_capture;
+ *     lattice_import / lattice_capture / lattice_check_update;
  *   - resident brief injection: a token-budgeted index of the entries that are
  *     applicable to the calling agent's workspace, so the model sees the
  *     memory without having to remember to search;
@@ -23,11 +23,13 @@
  *     with human corrections from `session/event`; recovered incidents become
  *     `lattice_capture` candidates (or drafts, per `capture.mode`);
  *   - panel routes for the settings UI: entries browse/search, entry detail,
- *     matrix grid, export, import and background image.
+ *     matrix grid, export, import and background image;
+ *   - update check: `lattice_check_update` / panel route read the GitHub raw
+ *     `package.json` and compare versions (report only; installation stays manual).
  */
 import z from "@deepseek-ai/schemastery";
 import { defineTool } from "@deepseek-ai/dsh-tools";
-import { appendFileSync, mkdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
   defaultRoot,
@@ -96,7 +98,7 @@ export const inject = ["tools"];
 
 const SECTION_NAME = "dsh-lattice-memory";
 const API_PANEL = "/lattice-panel";
-const PANEL_ENDPOINTS = ["version", "state", "setup", "entries", "entry", "matrix", "export", "import", "compose", "background", "captures", "clear", "delete", "backup", "restore", "pick-directory"];
+const PANEL_ENDPOINTS = ["version", "state", "setup", "entries", "entry", "matrix", "export", "import", "compose", "background", "captures", "clear", "delete", "backup", "restore", "pick-directory", "update"];
 const PANEL_VERSION = "0.1.0-m5";
 const API_STATE = API_PANEL + "/state";
 const API_SETUP = API_PANEL + "/setup";
@@ -114,8 +116,10 @@ const API_DELETE = API_PANEL + "/delete";
 const API_BACKUP = API_PANEL + "/backup";
 const API_RESTORE = API_PANEL + "/restore";
 const API_PICK_DIRECTORY = API_PANEL + "/pick-directory";
+const API_UPDATE = API_PANEL + "/update";
 const BODY_LIMIT = 8 * 1024;
 const PANEL_BODY_LIMIT = 256 * 1024;
+const UPDATE_TIMEOUT_MS = 8000;
 
 /** Defaults kept in one place: schema defaults, direct-call defaults, docs. */
 const DEFAULTS = Object.freeze({
@@ -123,6 +127,8 @@ const DEFAULTS = Object.freeze({
   maxTokens: 1500,
   staleDays: 180,
   similarityThreshold: 0.85,
+  repo: "19136644525lxy/dsh-lattice-memory",
+  branch: "main",
 });
 
 /**
@@ -235,6 +241,18 @@ export const Config = z
           .description("How many newest backups to keep in the destination directory (older ones are pruned)."),
       })
       .default({}),
+    update: z
+      .object({
+        repo: z
+          .string()
+          .default(DEFAULTS.repo)
+          .description("GitHub owner/repo that hosts the plugin (used by lattice_check_update and the panel)."),
+        branch: z
+          .string()
+          .default(DEFAULTS.branch)
+          .description("Branch whose package.json is read for the version check."),
+      })
+      .default({}),
   })
   .description("Lattice configuration.");
 
@@ -300,6 +318,17 @@ function resolveConfig(raw) {
         DEFAULT_KEEP,
         1,
       ),
+    },
+    update: {
+      repo: (() => {
+        const repo = value.update && typeof value.update === "object" ? String(value.update.repo ?? "").trim() : "";
+        return /^[\w.-]+\/[\w.-]+$/.test(repo) ? repo : DEFAULTS.repo;
+      })(),
+      branch: (() => {
+        const branch =
+          value.update && typeof value.update === "object" ? String(value.update.branch ?? "").trim() : "";
+        return branch === "" ? DEFAULTS.branch : branch;
+      })(),
     },
   };
 }
@@ -1860,6 +1889,137 @@ function panelWorkspace(url) {
   return explicit === "" ? process.cwd() : explicit;
 }
 
+/* ------------------------------- updates -------------------------------- */
+
+/** Version of the plugin that is actually loaded on this machine. */
+function readLocalPackageVersion() {
+  try {
+    const raw = readFileSync(join(PLUGIN_ROOT, "package.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    return typeof parsed.version === "string" ? parsed.version.trim() : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+function parseSemver(value) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+    String(value || "").trim(),
+  );
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), pre: match[4] || "" };
+}
+
+/** 1 when a > b, -1 when a < b, 0 when equal (unparsable sides count as equal). */
+function compareSemver(a, b) {
+  const left = parseSemver(a);
+  const right = parseSemver(b);
+  if (!left || !right) return 0;
+  for (const key of ["major", "minor", "patch"]) {
+    if (left[key] !== right[key]) return left[key] > right[key] ? 1 : -1;
+  }
+  if (left.pre === right.pre) return 0;
+  if (left.pre === "") return 1;
+  if (right.pre === "") return -1;
+  return left.pre > right.pre ? 1 : -1;
+}
+
+async function readRemoteManifest(config) {
+  const repo = config.update.repo;
+  const branch = config.update.branch;
+  const sourceUrl = `https://raw.githubusercontent.com/${repo}/${branch}/package.json`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPDATE_TIMEOUT_MS);
+  try {
+    const response = await fetch(sourceUrl, { signal: controller.signal, headers: { accept: "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status} from ${sourceUrl}`);
+    const text = await response.text();
+    const manifest = JSON.parse(text);
+    return { repo, branch, sourceUrl, manifest };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Compare the loaded version with the one published on GitHub. Report only:
+ * installing the newer build stays an explicit user action.
+ */
+async function checkForUpdate(config) {
+  const current = readLocalPackageVersion();
+  try {
+    const remote = await readRemoteManifest(config);
+    const latest = typeof remote.manifest.version === "string" ? remote.manifest.version.trim() : "";
+    const comparison = latest === "" ? 0 : compareSemver(latest, current);
+    const spec = `github:${remote.repo}${remote.branch === "main" ? "" : `#${remote.branch}`}`;
+    return {
+      ok: true,
+      current,
+      latest,
+      hasUpdate: comparison > 0,
+      repo: remote.repo,
+      branch: remote.branch,
+      sourceUrl: remote.sourceUrl,
+      homepage: `https://github.com/${remote.repo}`,
+      installSpec: spec,
+      hint:
+        comparison > 0
+          ? `发现新版本 ${latest}（当前 ${current}）：在 DSH 插件页重装 ${spec}，然后点面板里的「重载界面」。`
+          : `已是最新版本（${current}）。`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      current,
+      error: {
+        code: "update-check-failed",
+        message: String(error && error.message ? error.message : error),
+      },
+    };
+  }
+}
+
+function updateTool(config) {
+  return defineTool({
+    name: "lattice_check_update",
+    description:
+      "Check GitHub for a newer Lattice version (reads package.json from the configured repo/branch). Report only; installing stays a manual step.",
+    parameters: {},
+    output: {
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          ok: { type: "boolean", required: true, description: "Whether the check completed." },
+          current: { type: "string", required: true, description: "Version loaded on this machine." },
+          latest: { type: "string", description: "Version published on the configured branch." },
+          has_update: { type: "boolean", description: "True when the remote version is newer." },
+          repo: { type: "string", description: "owner/repo that was checked." },
+          install_spec: { type: "string", description: "Spec to install the newer build." },
+          source_url: { type: "string", description: "URL of the package.json that was read." },
+          hint: { type: "string", description: "Human-readable next step." },
+          error: { type: "object", additionalProperties: true, description: "Check error when ok is false." },
+        },
+      },
+      render: (args, value) => [{ type: "text", text: value.hint || value.current || "lattice_check_update" }],
+    },
+    execute: async () => {
+      const result = await checkForUpdate(config);
+      return {
+        ok: result.ok,
+        current: result.current,
+        latest: result.latest || "",
+        has_update: result.hasUpdate === true,
+        repo: result.repo || config.update.repo,
+        install_spec: result.installSpec || "",
+        source_url: result.sourceUrl || "",
+        hint: result.ok ? result.hint : `检查更新失败：${result.error.message}`,
+        error: result.ok ? undefined : result.error,
+      };
+    },
+  });
+}
+
 /** Legacy onboarding routes kept for reference; superseded by mountPanelRoutes.
  *  TODO(M5.1): delete once the panel route has shipped one release.
  */
@@ -2601,6 +2761,16 @@ async function handlePanelRequest(ctx, config, req, res) {
     return;
   }
 
+  if (tail === "/update" && method === "GET") {
+    const result = await checkForUpdate(config);
+    if (!result.ok) {
+      sendJson(res, 502, { ok: false, ...result });
+      return;
+    }
+    sendJson(res, 200, { ok: true, ...result });
+    return;
+  }
+
   if (tail === "/pick-directory" && method === "POST") {
     let result = { ok: true, path: "", hint: "no-directory-picker" };
     try {
@@ -3231,6 +3401,7 @@ export function apply(ctx, rawConfig) {
       exportTool(config),
       importTool(config),
       captureTool(ctx, config),
+      updateTool(config),
     ];
     for (const tool of tools) {
       ctx.effect(() => ctx.tools.register(tool), `dsh-lattice-memory: tool ${tool.name}`);

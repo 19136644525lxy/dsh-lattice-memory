@@ -42,6 +42,7 @@ window.__ModuleLoader__.load({
     const API_BACKUP = API + "/backup";
     const API_RESTORE = API + "/restore";
     const API_PICK_DIRECTORY = API + "/pick-directory";
+    const API_UPDATE = API + "/update";
     const DISMISS_KEY = "dsh-lattice-memory:onboarding-dismissed";
 
     // Captured in apply() so components can reach the host directory picker
@@ -1987,6 +1988,9 @@ window.__ModuleLoader__.load({
       const [summary, setSummary] = useState(null);
       const [entryCount, setEntryCount] = useState(null);
       const [reloadKey, setReloadKey] = useState(0);
+      const [updateInfo, setUpdateInfo] = useState(null);
+      const [updateBusy, setUpdateBusy] = useState(false);
+      const [updateError, setUpdateError] = useState("");
 
       useEffect(() => {
         let cancelled = false;
@@ -2017,6 +2021,29 @@ window.__ModuleLoader__.load({
 
       const refreshAll = useCallback(() => {
         setReloadKey((value) => value + 1);
+      }, []);
+
+      const checkUpdate = useCallback(() => {
+        setUpdateBusy(true);
+        setUpdateError("");
+        getJson(API_UPDATE)
+          .then((body) => {
+            setUpdateInfo(body);
+            if (!body || body.ok !== true) setUpdateError(String((body && body.error && body.error.message) || "检查更新失败"));
+          })
+          .catch((err) => {
+            setUpdateInfo(null);
+            setUpdateError(String((err && err.message) || err));
+          })
+          .then(() => setUpdateBusy(false));
+      }, []);
+
+      const reloadUi = useCallback(() => {
+        try {
+          window.location.reload();
+        } catch (err) {
+          setUpdateError(String((err && err.message) || err));
+        }
       }, []);
 
       return h(
@@ -2065,6 +2092,28 @@ window.__ModuleLoader__.load({
               Icon("renew", 12),
               h("span", { style: { marginLeft: 4 } }, "刷新"),
             ),
+            h(
+              "button",
+              {
+                type: "button",
+                title: "读取 GitHub 上 package.json 的版本并与本地比较（只提示，不自动安装）",
+                onClick: checkUpdate,
+                disabled: updateBusy,
+                style: { ...buttonStyle("ghost", updateBusy), padding: matrixFill ? "2px 8px" : "4px 10px", fontSize: 11.5 },
+              },
+              Icon("renew", 12),
+              h("span", { style: { marginLeft: 4 } }, updateBusy ? "检查中…" : "检查更新"),
+            ),
+            h(
+              "button",
+              {
+                type: "button",
+                title: "重新加载界面（插件已更新但页面还是旧 bundle 时用；不会重开整个应用）",
+                onClick: reloadUi,
+                style: { ...buttonStyle("ghost", false), padding: matrixFill ? "2px 8px" : "4px 10px", fontSize: 11.5 },
+              },
+              "重载界面",
+            ),
           ),
           matrixFill ? null : h("div", { style: { marginTop: 5, color: C.subtle, fontSize: 12 } }, "跨项目 · 按版本 / 环境分区的经验层"),
           matrixFill ? null : h(
@@ -2074,6 +2123,26 @@ window.__ModuleLoader__.load({
           ),
           matrixFill ? null : h("div", { style: { marginTop: 10 } }, h(BackgroundPicker, null)),
         ),
+        updateError !== ""
+          ? h("div", { style: { padding: matrixFill ? "10px 14px 0" : "12px 17px 0" } },
+              h(Notice, { tone: "warn" }, "检查更新失败：", updateError),
+            )
+          : updateInfo && updateInfo.ok
+            ? h("div", { style: { padding: matrixFill ? "10px 14px 0" : "12px 17px 0" } },
+                h(Notice, { tone: updateInfo.hasUpdate ? "warn" : undefined },
+                  updateInfo.hasUpdate
+                    ? `发现新版本 ${updateInfo.latest}（当前 ${updateInfo.current}）`
+                    : `已是最新版本（${updateInfo.current}）`,
+                  updateInfo.hasUpdate && updateInfo.installSpec
+                    ? h("div", { style: { marginTop: 4 } },
+                        "在 DSH 插件页重装 ",
+                        h("span", { style: { fontFamily: C.mono, fontSize: 11.5 } }, updateInfo.installSpec),
+                        "，然后点上方「重载界面」。",
+                      )
+                    : null,
+                ),
+              )
+            : null,
         hostError !== ""
           ? h("div", { style: { padding: "12px 17px 0" } },
               h(Notice, { tone: "warn" },
