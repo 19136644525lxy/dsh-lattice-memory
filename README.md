@@ -6,7 +6,7 @@
 
 | | 全局规则（AGENTS.md / 技能） | Lattice |
 | --- | --- | --- |
-| 形态 | 人类手写的指令文本 | 结构化条目（YAML frontmatter + Markdown 正文） |
+| 形态 | 手写的指令文本 | 结构化条目（YAML frontmatter + Markdown 正文） |
 | 生效范围 | 所有工作区**无条件**加载 | 共享库全局可见，但只按工作区识别出的维度召回 |
 | 进入上下文 | 每次对话**全量**注入，越长越占预算 | 默认只注入匹配当前维度的 topK（8 条 / ≤1500 tokens），其余靠 `lattice_search` 按需取 |
 | 版本/环境区分 | 没有机制；只能把"1.20.1 用 X、1.21 用 Y"混写在正文里 | 每条带 `dims`，检索按版本/加载器/平台过滤；跨版本命中的会标 `applicable: false` |
@@ -148,7 +148,7 @@ evidence: ["file:src/main/java/com/example/PotionHandler.java"]
 | --- | --- | --- |
 | `id` | ✅ | `^[a-z0-9][a-z0-9._-]*$`，≤80 字符，即文件名 |
 | `kind` | ✅ | `contract` / `decision` / `gotcha` / `port` / `checklist` / `reference` / `note` |
-| `title` | ✅ | 人类可读标题 |
+| `title` | ✅ | 可读标题 |
 | `feature` | ✅ | 功能/能力名（矩阵与缺口按它聚合） |
 | `status` | ✅ | `draft` / `verified` / `stale` / `deprecated` / `superseded`（draft 不进常驻注入） |
 | `dims` | 强烈建议 | 维度→值；值可写区间（`">=1.21 <1.22"`）或通配（`"1.20.x"`） |
@@ -164,7 +164,7 @@ evidence: ["file:src/main/java/com/example/PotionHandler.java"]
 宿主会观察工具执行和用户消息，把"踩坑后又修好"的过程记成**候选**（默认不写库）：
 
 - 某工具先失败、之后同一 agent 里同一工具又成功 → 生成候选；
-- 人类纠正（"不对 / 应该 / 改成 / 而不是 …"）会挂到当前未恢复的失败上，轮次结束或修好时收敛成候选；
+- 用户纠正（"不对 / 应该 / 改成 / 而不是 …"）会挂到当前未恢复的失败上，轮次结束或修好时收敛成候选；
 - 候选里有：失败原文、涉及文件、时间线、你说过的纠正原话；
 - 默认 `capture.mode: notify`：候选进面板「捕获」tab，模型用 `lattice_capture` 查看、接受（写成 draft）、丢弃；改成 `draft` 或 `auto` 则直接写 draft。
 
