@@ -452,9 +452,9 @@ export function buildIncidentCandidate({ incident, dims = {}, workspace = "", no
     "",
     "## 时间线",
     "",
-    `- 失败：${new Date(incident.failedAt).toISOString()}`,
+    `- 失败：${new Date(incident.failedAt ?? incident.at).toISOString()}`,
     `- ${corrected ? "用户纠正" : "恢复"}：${new Date(incident.recoveredAt).toISOString()}`,
-    `- 尝试次数：${incident.attempts || 1}`,
+    `- 尝试次数：${incident.attempts || incident.count || 1}`,
     `- 工作区：${workspace.trim() === "" ? "（未识别）" : workspace}`,
   ];
   if (target !== "") body.push(`- 涉及目标：${target}`);
@@ -491,9 +491,9 @@ export function buildIncidentCandidate({ incident, dims = {}, workspace = "", no
     corrections: incident.corrections,
     reason: incident.reason,
     workspace: String(workspace ?? ""),
-    failedAt: incident.failedAt,
+    failedAt: incident.failedAt ?? incident.at,
     recoveredAt: incident.recoveredAt,
-    attempts: incident.attempts || 1,
+    attempts: incident.attempts || incident.count || 1,
     createdAt: now,
   };
 }

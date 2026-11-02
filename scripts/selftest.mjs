@@ -349,8 +349,8 @@ try {
 
   check("lintReport surfaces stale, missing evidence and duplicates", () => {
     const now = new Date("2026-11-02T00:00:00Z");
-    const old = fixtureEntry({ id: "old", status: "verified", verified_on: "2026-01-01" });
-    const noEvidence = fixtureEntry({ id: "no-evidence", status: "verified", verified_on: "2026-10-30", evidence: [] });
+    const old = fixtureEntry({ id: "old", status: "verified", verified_on: "2026-01-01", title: "旧条目：药水效果", summary: "1.20.1 药水效果写法" });
+    const noEvidence = fixtureEntry({ id: "no-evidence", status: "verified", verified_on: "2026-10-30", evidence: [], title: "没有证据的条目", summary: "一条没有证据的条目" });
     const dupA = fixtureEntry({ id: "dup-a", title: "同一件事的两种说法", summary: "完全一样的内容描述" });
     const dupB = fixtureEntry({ id: "dup-b", title: "同一件事的两种说法", summary: "完全一样的内容描述" });
     const report = lintReport([old, noEvidence, dupA, dupB], [], { staleDays: 180, similarityThreshold: 0.85, now });
@@ -372,7 +372,7 @@ try {
     assert.notEqual(afterWrite, first, "a new file must invalidate the cache");
     assert.equal(afterWrite.entries.length, 1);
     const file = entryFile(cacheRoot, "potion-duration-forge-1-20-1");
-    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("AttributeInstance", "AttributeMap"), "utf8");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replaceAll("AttributeInstance", "AttributeMap"), "utf8");
     const afterEdit = loadEntriesFromDir(dir);
     assert.notEqual(afterEdit, afterWrite, "an edit must invalidate the cache");
     assert.ok(afterEdit.entries[0].body.includes("AttributeMap"));
