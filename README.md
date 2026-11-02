@@ -19,16 +19,6 @@
 
 > 如果「添加插件」里找不到入口，也可以用命令行：`dsh plugin --profile desktop add github:19136644525lxy/dsh-lattice-memory`，或让 agent 调用 `plugin_manager` 的 `install_bundle`，`target` 传 `github:19136644525lxy/dsh-lattice-memory`。
 
-### 从插件市场索引安装（可选，可被搜索到）
-
-想让用户在 DSH 的「发现 / Discover」里搜索到 Lattice 时，用**市场索引**方式：把下面这个地址作为「插件市场索引」添加：
-
-```
-https://raw.githubusercontent.com/19136644525lxy/dsh-lattice-memory/main/market/index.json
-```
-
-索引里每个版本用 `source: { type: "git", url, commit }` 锁定到仓库的某个提交，安装时按该提交拉取，不随 `main` 漂移。**发布新版本后**需要改 `market/index.json` 里的 `version`、`publishTimestamp` 与 `source.commit`（用 `git rev-parse origin/main` 得到的完整 40 位 SHA），再 push。若宿主提示索引无效，先确认上面的 raw 地址能在浏览器直接打开、内容是合法 JSON。
-
 ## 首次使用
 
 1. 在对话里让 agent 调 `lattice_status`，确认 `configured: false`（还没配置库根）。
