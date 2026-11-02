@@ -24,10 +24,23 @@
     "lattice"
   ],
   "license": "MIT",
+  "author": "19136644525lxy",
+  "homepage": "https://github.com/19136644525lxy/dsh-lattice-memory#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/19136644525lxy/dsh-lattice-memory.git"
+  },
+  "bugs": {
+    "url": "https://github.com/19136644525lxy/dsh-lattice-memory/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
   "dsh": {
+    "manifestVersion": 1,
     "bundle": {
       "patch": "./cordis.patch.yml"
     },

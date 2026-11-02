@@ -18,6 +18,17 @@ dsh plugin --profile desktop add <插件目录绝对路径>
 
 装完**完全退出并重开 DSH 桌面端**（客户端 bundle 在页面启动时组装，桌面端 `Ctrl+R` 不一定生效）。
 
+### 从插件市场安装（可选）
+
+本仓库自带一个插件市场索引 `market/index.json`（Git 源），用户不需要 npm 账号即可搜索安装：
+
+1. 打开 DSH → Plugins → Discover → 添加索引地址：
+   `https://raw.githubusercontent.com/<用户名>/<仓库名>/main/market/index.json`
+2. 搜索 `Lattice` → 安装；
+3. 完全重开桌面端 → `lattice_status` 确认工具已就绪。
+
+> 索引里的版本按 `source.type: "git"` + 完整 commit SHA 固定，发新版时要同步更新 `commit`；仓库必须公开。
+
 ## 首次使用
 
 1. 在对话里让 agent 调 `lattice_status`，确认 `configured: false`（还没配置库根）。

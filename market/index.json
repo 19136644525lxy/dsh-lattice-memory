@@ -1,0 +1,65 @@
+{
+  "title": {
+    "en": "Lattice memory",
+    "zh-CN": "Lattice 记忆"
+  },
+  "description": {
+    "en": "Cross-project, version-aware memory for DeepSeek Harness",
+    "zh-CN": "跨项目、按版本维度组织的 DSH 经验记忆"
+  },
+  "metadata": {
+    "categories": {
+      "memory": {
+        "title": {
+          "en": "Memory",
+          "zh-CN": "记忆"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "dsh-lattice-memory",
+      "title": {
+        "en": "Lattice",
+        "zh-CN": "Lattice 记忆库"
+      },
+      "description": {
+        "en": "Shared memory library with dimension-aware retrieval, resident injection, automatic capture and a full-screen panel.",
+        "zh-CN": "共享记忆库：维度感知检索、常驻注入、自动捕获与全屏面板。"
+      },
+      "author": "19136644525lxy",
+      "homepage": "https://github.com/19136644525lxy/dsh-lattice-memory",
+      "repository": {
+        "url": "https://github.com/19136644525lxy/dsh-lattice-memory"
+      },
+      "metadata": {
+        "category": "memory",
+        "keywords": [
+          "dsh",
+          "memory",
+          "project-memory",
+          "version-aware"
+        ],
+        "labels": [],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1762000000,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/19136644525lxy/dsh-lattice-memory",
+            "commit": "REPLACE_WITH_40_CHAR_COMMIT_SHA"
+          },
+          "engines": {
+            "dsh": "*"
+          }
+        }
+      ]
+    }
+  ]
+}
