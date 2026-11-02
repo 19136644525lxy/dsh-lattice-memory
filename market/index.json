@@ -53,7 +53,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/19136644525lxy/dsh-lattice-memory",
-            "commit": "a0b26996de93527af64683636b78951d3df442ce"
+            "commit": "cc8a75717ed965d639ef6650ba21080e32487e3d"
           },
           "engines": {
             "dsh": "*"
