@@ -1,7 +1,7 @@
 # Lattice（`dsh-lattice-memory`）设计方案 v2
 
 > 版本：v2.1（2026-11-01）— 依据 2026-11-01 拍板更新（公开发布 / 首启选库根弹窗 / overlay 关闭 / MVP=M0–M3 / 项目仓库已定）
-> 状态：M0 已落地并在 DSH 桌面端实测通过（2026-11-02）；下一步 M1（检索）
+> 状态：M0 已落地并在 DSH 桌面端实测通过（2026-11-02）；M1 检索已实现并实测通过（2026-11-02）；M2 常驻注入 + 矩阵/缺口 + overlay 已实现并实测通过（2026-11-02）；M3 写入闭环已实现并实测通过（2026-11-02）；M4 通用性（projects.json 覆盖 + 条目缓存 + 多预设自测）已实现并实测通过（2026-11-02）；M5 导出/导入 + 设置面板已实现并实测（2026-11-02）；M6 半自动捕获已实现并实测（2026-11-02）；M7 全自动捕获（失败链 + 人类纠正）已实现并实测通过（2026-11-02，含跨轮纠正修复）；公开发布暂缓
 > 宿主：DeepSeek Harness 0.2.x（Cordis 插件体系 + bundle 安装）
 > 名字：品牌 **Lattice**，npm 包名 `dsh-lattice-memory`（2026-11-01 查重：registry.npmjs.org 返回 404，未注册；公开发布前再查一次，撞名则改用 scoped 包名 `@<scope>/dsh-lattice-memory`，展示名保持 Lattice）
 > 仓库：**https://github.com/19136644525lxy/dsh-lattice-memory.git**（本机 DSH 网络当前无法直连 github.com：web_fetch 报 `hostname resolves to a non-public IP address`；本地先 `git init`，由用户推送或使用现有远程）
@@ -157,14 +157,14 @@ updated: 2026-09-12
 | `brief` | 某 feature（或某个目标版本）的「移植/重建指南」Markdown：逐格现状 + 已知坑 + 缺口清单 |
 | `stats` | 条目数、验证率、按维度覆盖率、过期数 |
 
-### P2 — 协作与生态（M5）
+### P2 — 导出/导入与设置面板（M5，发布暂缓）
 
 | 功能 | 说明 |
 | --- | --- |
-| 导出通道 | `export`：子集导出为 `SKILL.md`（skills 通道）/ `AGENTS.md` 片段 / JSON（可迁移） |
-| 导入 | `import`：从 JSON 或 `session-search` 结果导入候选（dry-run 先展示差异） |
-| 面板 UI | client 侧 decoration 面板：浏览、检索、矩阵网格视图（可选，默认关闭） |
-| 发布 | npm scoped + plugin market 索引条目 + README 快速上手 |
+| 导出通道 | `lattice_export`：子集导出为 JSON（可再导入）/ `SKILL.md`（skills 通道）/ `AGENTS.md` 片段（已实现） |
+| 导入 | `lattice_import`：从 Lattice JSON 导入，默认 dry-run 展示新增/id 冲突/近似重复/凭证/非法记录（session-search 候选导入留作后续） |
+| 面板 UI | 设置页 `settings.section`：「Lattice 记忆」分节，含浏览 / 检索 / 矩阵网格 / 导出导入（已实现，默认可见） |
+| 发布 | npm + plugin market 索引条目 → **暂缓**（2026-11-02 用户拍板） |
 
 不做的候选（记入 open questions）：自动从会话末尾生成 draft、跨设备同步（交给 git）、语义 embedding（接口预留）、质量门禁拦截（误伤风险高）。
 
@@ -263,8 +263,8 @@ final = BM25(query)
 | `lattice_brief` | `feature` 或 `dims` 目标、`includeEvidence=false` | 移植/重建指南 Markdown（M4） |
 | `lattice_lint` | `fix=false`、`severity?` | 问题清单（重复 / 过期 / 冲突 / 孤立 / 缺证据），M4 起可 `fix` 安全项 |
 | `lattice_stats` | `groupBy: feature\|dim\|status` | 计数与覆盖率（M4） |
-| `lattice_export` | `format: skill\|agmd\|json`、过滤条件、`outPath` | 导出文件（M5） |
-| `lattice_import` | `source`、`dryRun=true` | 导入预览 / 结果（M5） |
+| `lattice_export` | `format: json\|skill\|agents`、`ids?/feature?/kind?/status?` | 导出内容（M5） |
+| `lattice_import` | `data`、`dry_run=true` | 导入合并预览 / 结果（M5） |
 
 实现说明：全部用 `defineTool` 声明参数与 `output.render`（Markdown 表格 / 清单），返回结构化 JSON 供其他工具链使用。
 
@@ -447,13 +447,17 @@ dsh-lattice-memory/
 | 阶段 | 交付 | 估算 | 验收标准 |
 | --- | --- | --- | --- |
 | **M0 骨架** | bundle 包、Config 加载、**首启引导（选库根弹窗 + `lattice_setup` 兜底）**、`lattice_profile` + `lattice_search` 桩、提示段、README/LICENSE | 2–3 天 | `install_bundle` 成功；首启卡片弹出、选目录后写入 `root.json` 并生效；无目录选择器时降级可用；重启保留；非法 config 加载报错 |
-| **M1 存储+检索+画像** | frontmatter/多根库、分词+BM25、`search/get/list`、`minecraft-mod` 预设、常驻注入 | 4–6 天 | fixtures 两套 MC 工作区画像正确；golden 检索集 top-3 命中 ≥ 80%；注入段 ≤ 1500 tokens 且顺序稳定 |
-| **M2 写入闭环** | `record/verify`、相似去重、密钥扫描、stale 判定 | 2–3 天 | 重复条目被拒并给合并建议；含密钥被拒；verify 后排序上升 |
-| **M3 矩阵与缺口** | `matrix`、`gaps`、`brief`（v0） | 3–4 天 | MC 矩阵正确标出 ✓/◐/✗；gaps 排序合理；brief 可直接指导移植 |
-| **M4 通用性验证** | `node-package` 预设、自定义 extractor、`lint`、`stats`、主动注入（实验） | 3–4 天 | 在 node18/node20 两 fixture 上矩阵与 brief 可用；lint 无假阳性；主动注入可关、失败不阻塞 |
-| **M5 协作发布** | `export`（skill/agmd/json）、`import`、面板 UI（可选）、**公开发布**（npm `dsh-lattice-memory`；撞名则 scoped）、market 条目、发布说明 | 5–7 天 | 导出 SKILL.md 被 skills 加载；两台机器共享 git 库可用；`npm i` 安装成功且首启引导正常 |
+| **M1 存储+检索+画像** | 条目 frontmatter 模型、分词+BM25、`search/get/list`、维度过滤、自测与示例 | 4–6 天 | 条目往返不丢字段；CJK/驼峰分词正确；golden 检索集 top-3 命中 ≥ 80%；`mode=strict` 排除跨版本、`prefer` 标 `applicable=false` |
+| **M2 注入+矩阵+overlay** | 常驻索引注入（≤1500 tokens，顺序稳定）、`brief` 摘要、`matrix`/`gaps` 工具、项目 overlay（`<workspace>/.lattice` 覆盖共享库） | 4–6 天 | 注入段 ≤1500 tokens 且仅注入匹配维度的条目；matrix 正确标出各维度组合的条目数与最佳状态；gaps 能与 brief 的 coverage gap 呼应；overlay 同 id 覆盖生效 |
+| **M3 写入闭环** | `record`/`verify`、相似去重、密钥扫描、stale 判定、lint/stats | 4–5 天 | 重复条目被拒并给合并建议；含密钥被拒；verify 后排序上升；stale 条目自动降权 |
+| **M4 通用性** | `projects.json` 工作区覆盖（绝对路径前缀 / 相对目录名）、条目读取缓存（mtime+size 指纹失效）、多预设自测（minecraft-mod / python / node-package / rust / generic） | 1–2 天 | 覆盖写入后 `lattice_profile` 显示 `source: projects.json` 且 dims 被替换；缓存命中时注入段不重复解析文件，编辑条目后立即反映；非 MC 预设检测正确 |
+| **M5 导出/导入 + 设置面板** | `lattice_export`（JSON / SKILL.md / AGENTS.md 片段，可过滤）、`lattice_import`（合并计划 + dry-run 差异预览）、设置界面面板（`settings.section`：浏览 / 检索 / 矩阵网格 / 导出导入） | 3–5 天 | 三种导出产物格式正确；导入 dry-run 能区分新增/id 冲突/近似重复/凭证/非法；面板在设置页可见并完成检索、矩阵、导出、导入 |
+| **M6 半自动捕获** | 监听 `tools/result`：工具失败→同一 agent 重试成功 → 候选队列（`<stateDir>/captures.json`）、常驻提示提醒、`lattice_capture` list/accept/discard、`capture.enabled/mode(notify\|draft)/maxPending` | 2–3 天 | 失败+重试能生成候选且不写库；accept 走与 record 相同的密钥/近重复/readOnly 校验并落成 draft；discard 不写库；候选项有上限与去重合并；`lattice_*` 自身工具不参与捕获 |
+| **M7 全自动捕获** | `session/event` 监听：人类纠正（`user/message` + `source.kind === "user"`）挂到未恢复的工具失败；`turn/end` 收敛失败链 → 候选；`capture.mode` 增加 `auto`；`detectUserCorrections` / `incidentMinutes` | 2–3 天 | 用户说"不对/应该…"后改对 → 生成带纠正引用的候选；未被纠正也未恢复的失败被丢弃；会话隔离；`mode=auto` 直接落 draft；`notify` 仍不自动写库 |
 
 **MVP = M0–M3，约 2–3 周（单人，熟悉 Cordis 可 1.5 周）**；M4 的第二个预设是“通用性”的硬验收，建议不跳过。
+
+**进度**：M0 ✅（2026-11-02 实测）；M1 ✅（2026-11-02 实测）；M2 ✅（2026-11-02 实测）；M3 ✅（2026-11-02 实测）；M4 ✅（2026-11-02 实测）；M5 ✅（2026-11-02 实测）；M6 ✅（2026-11-02 实测）；M7 ✅（2026-11-02 实测，含跨轮纠正修复）。**公开发布暂缓**（用户 2026-11-02 拍板：先完善功能与体验，不发布到市场；仓库推送仍按 M0 交付说明由用户执行）。
 
 ---
 
@@ -489,7 +493,7 @@ dsh-lattice-memory/
 | 1 | 库根 | **首次运行弹窗让用户自己选**（公开版体验），不写死默认路径 | §14 首启引导；§4.1 库根结构 |
 | 2 | 项目层 overlay（`<workspace>/.lattice`） | **关闭**（默认 false，不宣传） | §4.1、§8 |
 | 3 | MVP 范围 | **M0–M3**（2–3 周）；M4 通用性验证紧接其后 | §10 里程碑 |
-| 4 | 发布目标 | **公开发布**（GitHub 仓库已建，README/LICENSE/快速上手从 M0 就写） | §10 M5、附录 B |
+| 4 | 发布目标 | ~~公开发布~~ → **暂缓**（2026-11-02 更新：先完善功能与体验，不发布到市场；导出/导入/面板优先） | §10 M5、附录 E |
 | 5 | 项目仓库 | `https://github.com/19136644525lxy/dsh-lattice-memory.git` | 页首、§14.5 |
 
 > 关于 `$DSH_HOME/lattice`：它不再作为默认库根，只保留为**插件状态目录**（存 `root.json` 等），记忆库本体放在用户所选目录，天然可 git、可云盘、可共享。
@@ -569,7 +573,7 @@ M0 已按本计划实现并写入本目录（9 个文件，均为新增）：
 | `cordis.patch.yml` | bundle 挂载行 `- insert: - id: lattice / name: dsh-lattice-memory` |
 | `src/state.js` | `DSH_HOME` / 状态目录 / `root.json`；路径校验与 `~` 展开；库标记 `.lattice-root.json`、`entries/`、`projects.json` 的幂等初始化与可写探测 |
 | `src/detect.js` | 工作区画像：gradle/mod 元数据、package.json、pyproject、Cargo、Android、git 分支 → preset + dims |
-| `src/index.js` | Config（root/onboarding/inject/projectOverlay/staleDays）；`lattice_setup` / `lattice_status` / `lattice_profile` / `lattice_search`（M0 桩）；`/lattice/state`、`/lattice/setup` 路由；常驻提示段 |
+| `src/index.js` | Config（root/onboarding/inject/projectOverlay/staleDays）；`lattice_setup` / `lattice_status` / `lattice_profile` / `lattice_search`（M0 桩）；`/lattice/state`、`/lattice/setup` 路由（M5 起整体迁到 `/lattice-panel/*`）；常驻提示段 |
 | `src/client.js` | 手写 ModuleLoader bundle；`shell.overlay` 首启卡片（选择文件夹 → DSH 原生目录选择器 → 兜底手输；使用默认位置；稍后） |
 | `README.md` / `LICENSE` / `.gitignore` | 安装、验证、配置、开发说明；MIT；忽略规则 |
 
@@ -580,7 +584,7 @@ M0 已按本计划实现并写入本目录（9 个文件，均为新增）：
 3. 刷新 Web GUI，确认首启卡片出现；分别验证「选择文件夹…」「使用默认位置」「稍后」；
 4. 再次 `lattice_status` 确认 `configured=true`、`root_source=user|default`、`is_library=true`。
 
-M0 刻意未做：真实检索（M1）、常驻索引注入与矩阵（M2）、写入闭环（M3）、导出与发布（M4–M5）。
+M0 刻意未做（后续已补）：真实检索（M1 已补）、常驻索引注入与矩阵（M2 已补）、写入闭环（M3）、导出/导入与面板（M5 已补）；公开发布暂缓。
 
 ### M0 验收结果（2026-11-02，DSH 桌面端）
 
@@ -594,3 +598,176 @@ M0 刻意未做：真实检索（M1）、常驻索引注入与矩阵（M2）、�
   5. 成功后卡片显示"Lattice 已就绪"并自动消失，`configured=true`。
 - 修正项：`shell.overlay` 条目默认 click-through → 卡片根元素加 `pointerEvents: "auto"`；首启路由诊断写入 `<stateDir>/route-debug.log` 改为 `config.debug` 开关（默认关）。
 - 桌面端 UI 事实：`Ctrl+R` 不生效（需完全退出重开）、`Ctrl+Shift+I` 打不开 DevTools；装/改插件后必须整窗重启。
+
+## 附录 D：M1–M2 落地记录（2026-11-02）
+
+M1 已实现并写入本目录。相对 M1 原始计划的两处偏差：
+
+1. **常驻注入挪到 M2**：M1 先把「条目模型 + 检索 + 读取」做扎实，注入段（阈值/排序稳定性）与 `matrix/gaps` 一起在 M2 做，避免一次改太多；
+2. **检索增加维度亲和度与适用性标记**：`mode=prefer`（默认）对跨版本条目降权并标 `applicable: false`，`mode=strict` 直接排除——这是「同一功能不同版本做法不同」定位的直接落点。
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/frontmatter.js` | 零依赖 YAML 子集编解码（标量/映射/一层嵌套/内联与块数组/引号规则；非法形状保留为字符串） |
+| `src/entries.js` | 条目模型：kind/status/confidence 枚举、`validateEntry`、`normalizeEntry`、序列化（固定字段序）、`loadEntries`（坏文件上报）、`getEntry`、`saveEntry`（overwrite 保护、原子写） |
+| `src/search.js` | `tokenize`（拉丁 + CJK 二元组 + 版本 token）、`buildIndex`（字段加权）、BM25（k1=1.2, b=0.75）、`matchDimensionValue`（`*` / `1.20.x` / 区间 / 数组）、`dimensionAffinity`（strict/prefer）、`freshness`（半衰期=staleDays）、`rankEntries` |
+| `src/index.js` | 新增 `lattice_get`、`lattice_list`；`lattice_search` 重写（query/feature/dims/mode/kinds/status/limit，dims 缺省自动画像）；常驻提示段改为真实检索流程 |
+| `scripts/selftest.mjs` | 零依赖自测：`node scripts/selftest.mjs`，12 项断言（YAML/条目往返、分词、维度匹配、BM25、读写） |
+| `examples/entries/` | 3 条示例：1.20.1 Forge / 1.21.4 NeoForge 的「药水持续时间」跨版本条目 + 一条无版本维度的通用 gotcha |
+| `package.json` | 版本号保持 `0.1.0`（约定：只有用户明确要求升级时才升版本）；`files` 增加 `examples` |
+| `README.md` | 重写：状态表、能力、配置、工具表、条目格式与字段表、检索说明、自测、库布局、路线图 |
+
+**M1 验收结果（2026-11-02，DSH 桌面端实测通过）**：
+1. 重启桌面端后 `lattice_status` → `configured=true is_library=true`、库根 `F:\Lattice`、6 个工具进入会话；
+2. 示例条目已写入 `F:\Lattice\entries\`（3 条），`lattice_list` 正确解析 frontmatter（`dims.mcver` 保持字符串 `"1.20.1"`，未被 YAML 数字化）；
+3. `lattice_search(query="药水持续时间")` → 2 条命中；
+4. `lattice_search(query="药水持续时间", dims='{"mcver":"1.21.4","loader":"neoforge"}')` → NeoForge 条目 `applicable: true` score 4.30；Forge 条目 `applicable: false` score 1.72，`dim_notes` 明确列出 `mcver: 1.20.1 does not match 1.21.4` / `loader: forge does not match neoforge`；
+5. 同查询 `mode=strict` → 只剩 1 条（NeoForge）；
+6. `lattice_search(query="attribute 顺序", dims='{"mcver":"1.20.1","loader":"forge"}')` → 无版本维度的通用 gotcha 排第一且 `applicable: true`，版本匹配的 Forge 条目第二，NeoForge 条目 `applicable:false` 降权——通用知识 + 版本过滤组合符合预期；
+7. `lattice_get(id=...)` 返回 body；`lattice_profile(path=...)` 在 node 包目录正确识别 `preset=node-package`、dims；
+8. 验收中发现 `lattice_profile`/`lattice_search` 未传 path 时用的是**宿主进程 cwd**（`~/.dsh/profiles/desktop`），不是调用方 agent 的会话工作区——已改为经 `exec.agent` + `workingDirectory.ensure()` 解析真实工作区（需再次重启桌面端生效）。
+
+未执行：`node scripts/selftest.mjs`（本机无可用 shell/Node，改由运行期实测覆盖）；该自测脚本保留给有 Node 的开发环境。
+
+**M1 已知限制**：无 embedding（纯词面 + 维度，M4 预留适配层）；条目正文是 Markdown，检索权重只到字段级；`lattice_list` 默认最多 200 条。
+
+### M2 落地记录（2026-11-02）
+
+相对 M2 原始计划（当时把「注入+写入闭环」与「矩阵/缺口」拆在两段），实际执行顺序调整为：**M2 = 常驻注入 + 矩阵/缺口 + overlay**，**M3 = 写入闭环**（里程碑表已同步改写）。理由：注入、矩阵、overlay 共享同一份加载与维度亲和逻辑，一起落地成本最低；写入闭环涉及去重/密钥/状态迁移，单独一段更稳。
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/matrix.js`（新增） | `DIM_KEY_ORDER`（game/mcver/loader/host/platform/runtime/sdk/product/branch）、`signatureOf`、`pickDims`、`chooseKeys`（显式优先，否则按已知顺序取前 4）、`scopeByFeature`、`buildMatrix`（feature × 维度组合网格 + 每格条目数与最佳状态）、`findGaps`（feature 在当前维度无可用条目 → 缺口，并列已覆盖组合）、`STATUS_RANK` |
+| `src/brief.js`（新增） | 常驻简报：`estimateTokens`（CJK 逐字、拉丁按 4 字符≈1 token）、`renderResidentLine`、`selectResident`（只取 `applicable`，同 feature ≤2 条，score = 亲和 × 状态权重 × 新鲜度）、`buildBrief`（header/footer、预算截断、coverage gap 提示） |
+| `src/entries.js` | 新增 `loadEntriesFromDir`、`loadEntriesMerged(root, overlayRoot)`（overlay 同 id 覆盖）、`getEntryMerged`；`loadEntries` 保留为单根版本 |
+| `src/index.js` | 提示段改为 `renderPromptSection(config, context)`：未配置时给首启提示，已配置时注入简报（`inject.enabled` 可关）；工作区从 `context.agent.session.header.cwd` 同步读取（不再依赖 `process.cwd()`）；新增 `lattice_brief`（预览注入全文 + token 估计）、`lattice_matrix`、`lattice_gaps`；`lattice_status` 输出 overlay 状态；search/get/list 统一走合并条目；`lattice_gaps`/`lattice_search` 在「工作区维度未识别」时明确提示"未过滤适用性，请显式传 dims"，不再假装全部适用 |
+| `scripts/selftest.mjs` | 增加 7 项 M2 断言：chooseKeys 顺序/上限、矩阵分组与 best_status、gaps 判定、简报预算与不匹配排除、coverage gap、estimateTokens、overlay 合并与回退 |
+| `README.md` / `package.json` | README 更新 M2 能力/配置/工具/注入章节/overlay/路线图；package.json description 提及 M2，版本仍 `0.1.0` |
+
+**M2 验收（2026-11-02 重启后实测通过）**：
+1. `lattice_status` 输出含 `overlay=false` ✅；
+2. `lattice_brief` 输出常驻简报全文 ✅：无维度时 3/3 条、~261 tokens；`dims={"mcver":"1.20.1","loader":"forge"}` 时 2/3 条、~212 tokens，Forge 条目 + 通用 gotcha 入选、NeoForge 条目被排除（`applicable:false` 不入简报）✅；
+3. `lattice_matrix(feature="药水持续时间", keys="mcver,loader")` 返回 1 行 × 2 列网格 ✅（实测：`mcver=1.20.1|loader=forge → 1 (verified)`、`mcver=1.21.4|loader=neoforge → 1 (verified)`）；
+4. `lattice_gaps(dims='{"mcver":"1.21.4","loader":"fabric"}')` 实测 `1/2 covered`，缺口列出「药水持续时间」并给出已覆盖组合；`dims={"mcver":"1.21.4","loader":"neoforge"}` 实测 `2/2 covered` ✅；
+5. 工作区维度未识别时（空目录 `F:\温迪` → generic），`lattice_gaps` 返回"维度未识别，请显式传 dims"提示、不再假报 covered ✅；
+6. `node scripts/selftest.mjs` 未运行（本机无 Node/shell；脚本保留给有 Node 的环境）。
+
+**已知问题（实测中发现，已修）**：`lattice_gaps` 在 dims 为空对象（工作区检测不到维度）时把全部 feature 判为 covered，容易误导——已改为显式返回"维度未识别，请传 dims"；`lattice_search` 同样在 dims 为空时附加"适用性未过滤"提示。
+
+**M2 已知限制**：注入段是每轮同步渲染（条目数大时略慢，M4 加缓存）；`projects.json` 覆盖画像尚未消费（M4）；矩阵列数默认最多 4 个维度键；gaps 不区分「完全没有条目」与「条目都存在但 status 太旧」。
+
+### M3 落地记录（2026-11-02 已实测通过）
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/write.js`（新增） | 写入闭环纯函数：`SECRET_RULES`（私钥块 / AWS AKIA\|ASIA / `gh[pousr]_` / `sk-` / JWT / `password=` / `*_token=` / dsh launch token；掩码预览）、`scanSecrets`、`similarityTokens`（title+summary+feature）、`similarity`（Jaccard）、`findSimilar`、`isoDate`/`daysSince`、`staleCandidates`（仅 verified 且超过 staleDays）、`lintReport`（stale/无证据/近重复对/疑似凭证/坏文件汇总） |
+| `src/index.js` | Config 新增 `readOnly`、`record.requireEvidence`（默认 true）、`lint.similarityThreshold`（默认 0.85）+ `resolveConfig` 同步；新增 `ensureWritable`/`parseEvidence`（JSON 数组或换行/分号列表）/`rejectSecrets`；新增 `lattice_record`（title/kind/feature 必填；status 仅 draft/verified；evidence 默认必填；id 缺省由 title slug 化；已存在 id / 近重复（Jaccard≥阈值）/ 疑似凭证 → 拒写）、`lattice_verify`（必须带新 evidence；合并证据、刷新 verified_on、可调 confidence；readOnly 拒绝）、`lattice_lint`（合并库+overlay 做健康检查）；`lattice_status` 增加 `read_only`；工具注册达 12 个 |
+| `scripts/selftest.mjs` | 新增 4 项 M3 断言：密钥扫描与掩码、Jaccard 相似/近似查重、stale 判定、lintReport（stale/无证据/重复/notes） |
+| `README.md` | 版本状态表 M3 行、当前能力（写入闭环）、配置（readOnly/record/lint）、工具表三件套、新增「写入闭环」章节（record→verify→lint 流程与安全阀）、自测覆盖、文件分工加 `write.js`、路线图 |
+
+**M3 验收（2026-11-02 重启后实测，全部通过）**：
+1. `lattice_status` 显示 `read_only=false`，12 个工具就位。
+2. `lattice_record` 录中文标题 draft（显式 id `dsh-desktop-restart-required`）→ 落盘 `F:\Lattice\entries\dsh-desktop-restart-required.md`，提示"draft stored"。
+3. 同内容换 id 再录 → 被拒：`refused as a near-duplicate of dsh-desktop-restart-required (1)`。
+4. `lattice_verify(id=..., evidence=...)` → `draft -> verified (low, verified 2026-11-02, 3 evidence item(s))`。
+5. 含 `AKIA…` 的 record → 被拒：`refused to store credential-like content (aws-access-key)`。
+6. `lattice_lint` → `4 entries, 0 invalid file(s)`，无 finding；`lattice_brief` 显示 4/4 条目、~300 tokens，新 verified 条目进入常驻索引。
+7. 顺带修掉一个可用性问题：中文标题自动 id 曾生成非法 slug（`dsh-桌面端…`）→ 现在非法时回退 `feature-kind-标题哈希`，并在错误信息里提示显式传 `id`。
+
+**设计取舍**：record 只写共享库（不写 overlay，避免"项目私有记忆"被误认为共享）；draft 不进常驻注入，只有 verified 才进注入与 `applicable: true`；近似重复「拒写」而非自动合并，把合并决策留给作者（lint 给出重复对）；verify 从不改 body，只动状态/证据/日期。
+**M3 已知限制（记录在此，M4 再说）**：supersedes 目前只是元数据，不会自动把旧条目降为 superseded；无 embedding 去重（纯 Jaccard）；stale 只是报告，不自动降权写入；`lattice_lint` 全库两两比对，条目数很大时是 O(n²)。
+
+### M4 落地记录（2026-11-02 已实测通过）
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/projects.js`（新增） | `readProjects(root)`（读 `<root>/projects.json` 的 `projects` 映射，坏文件归零）、`normalizePathKey`（反斜杠→斜杠、去尾斜杠、小写）、`matchProject(projects, workspace)`：绝对键命中"工作区本身或子目录"并按最长前缀胜；相对键按路径目录名匹配；返回 `{key, preset, dims}` |
+| `src/entries.js` | `loadEntriesFromDir` 增加模块级缓存：指纹 = Markdown 文件数 + 最新 mtimeMs/size，命中直接复用结果；新增/编辑（mtime 变）或删除（数量变）立即失效；`loadEntries`/`loadEntriesMerged`/`getEntryMerged` 自动受益 |
+| `src/index.js` | 新增 `detectForWorkspace(config, workspace)`：检测后套 `projects.json` 覆盖（preset 覆盖、dims 逐键合并），返回 `source: detected|projects.json`；`lattice_profile` 输出新增 `source` 且 render 显示；常驻提示段、`lattice_search`/`lattice_brief`/`lattice_gaps` 的 dims 检测统一走它（`dims_source` 为 `projects:<preset>` 或 `workspace:<preset>`） |
+| `scripts/selftest.mjs` | 新增 3 项断言：缓存命中/失效（新增文件、编辑内容）、预设检测（minecraft-mod / python / node-package / rust / generic）、`projects.json` 覆盖匹配（绝对 vs 相对、最长前缀胜） |
+| `README.md` | 版本状态 M4 行、当前能力（工作区覆盖 / 读取缓存）、新增「工作区覆盖（projects.json）」章节、自测覆盖、文件分工加 `projects.js`、库布局注释更新、路线图 |
+| `package.json` | description 补 M4；version 保持 0.1.0 |
+
+**M4 验收（2026-11-02 重启后实测，全部通过）**：
+1. `lattice_profile(path=F:\温迪\dsh-lattice-memory)` → `preset=node-package`、`source: detected`，signals 只有 package.json。
+2. 往 `F:\Lattice\projects.json` 写入 `F:\温迪` 覆盖（dims.product=windy-workspace）后，`lattice_profile`（无参数）→ `source: projects.json`，dims.product 被替换为 `windy-workspace`，signals 含 `projects.json`。
+3. `lattice_brief` → `dims_source: projects:node-package`，header 显示覆盖后的维度。
+4. 写入/提升条目后 `lattice_brief` 立即从 4/4 变 5/5 且含新条目 → 缓存失效正确。
+5. 删除覆盖后 `lattice_profile` 回到 `source: detected`、`preset=generic`（空工作区）。
+6. `lattice_lint` → `5 entries, 0 invalid file(s)`，无 finding。
+
+**设计取舍**：`projects.json` 只影响"当前工作区用什么维度"，不改写条目本身；覆盖是"显式优先"，因此项目作者可以钉死错误检测；缓存用廉价指纹而不是文件监听（无 watcher 依赖、跨平台一致），代价是每次注入多几次 `stat`，在几百条目规模可忽略；非 MC 预设靠内置 detect 覆盖（node/python/rust/android/gradle-jvm），自定义 extractor 按需再加。
+
+---
+
+## 附录 E：M5 落地记录（2026-11-02，待重启实测）
+
+**范围调整**：按用户 2026-11-02 拍板，M5 不做 npm/market 公开发布，改为把「导出 / 导入 / 设置界面面板」三件事做完（原计划里的发布流程移到"暂缓"）。
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/portable.js`（新增） | `EXPORT_SCHEMA="lattice-export/1"`；`filterEntries`；`entryToPortable` / `portableToEntry`；`exportJson` / `exportSkill` / `exportAgents`；`parseImportPayload`（对象 / JSON 串 / 裸数组）；`planImport`（新增 / `id-exists` / `credentials` / `near-duplicate` / problems）；`applyImport` |
+| `src/background.js`（新增） | 面板背景图存取：`readBackgroundMeta` / `readBackgroundBytes` / `saveBackgroundDataUrl`（只接受 `data:image/(png\|jpeg\|webp\|gif\|bmp);base64,…`，≤8MB）/ `clearBackground`；落盘 `<stateDir>/background.bin` + `background.json`，`BACKGROUND_LIMITS.bodyLimit = 12MB`；因为桌面端每次启动端口会变（页面 origin 变），存 host 侧才能跨重启保留 |
+| `src/index.js` | 工具 `lattice_export`、`lattice_import`；14 个工具注册；面板与首启接口注册为**单条 prefix 路由** `/lattice-panel/*`（`version/state/setup/entries/entry/matrix/export/import`），由 `route` handler 分发并整体 try/catch → 500 JSON；旧 `/lattice/*` 精确路由改名 `mountRoutesLegacy` 不再调用（M5.1 清理）；`entryView` / `panelWorkspace` 助手 |
+| `src/client.js` | 保留首启卡片；`LatticePanel` 同时注册到 `settings.section`（label「Lattice 记忆」，order 120）与**对话页头部** `conversation.session.header.utilities`（按钮「记忆库」→ **全屏覆盖层** `shell.overlay` 条目 `lattice-drawer`：`position:fixed; inset:0`，遮住工作区，Esc/右上角「关闭」返回）；不用主题的 `--dsw-alias-bg-*` token 作全屏底色（壁纸插件把 `--dsw-alias-bg-base` 置 transparent、皮肤主题 layer token 带 alpha，会透出工作区）；**背景 = 壁纸透传 + 压暗层**：`pageBackground()` 从壁纸插件的 `.we-layer .we-media`（img 的 `currentSrc` / video 的 `poster`）或 `.we-live-poster` 的 `background-image` 取壁纸 URL，铺 `cover` 再叠 scrim（深色 rgba(8,10,14,.74) / 浅色 rgba(248,250,253,.82)），取不到才退回实色 `opaquePage()`（`pageIsDark()` 读 `body[data-ds-dark-theme]`，深色 `#0f1115` / 浅色 `#f6f7fb`）；取不到壁纸时用宿主保存的本地图片（`src/background.js` + `GET /lattice-panel/background`，面板头部「背景图」上传/清除，优先级：壁纸插件 → 本地图片 → 实色）；顶部 `padding-top: 68px` 避开桌面端窗口按钮与应用菜单；三个 tab：浏览/检索、矩阵（**3D 神经网络视图**：手写透视投影 + SVG 连线，feature 环与维度组合环在 3D 空间连线，拖拽旋转（带惯性）/ 滚轮缩放 / 悬停高亮，贝塞尔曲线边、线宽=条目数、颜色=最佳状态、虚线=缺口；增强视觉：球体径向渐变 + 高光、节点辉光、背景星点、双环轨道虚线、沿实线流动的脉冲光点、深度排序与景深透明；**矩阵 tab 激活时进入 fullBleed 布局**：面板 `display:flex` 撑满抽屉、隐藏副标题/state 行/背景图行、画布 `flex:1` 铺满剩余高度，`ResizeObserver` 把画布实际像素写入 `size` state 作为投影坐标系 `W/H`（随窗口实时变化，`K=min(W,H)*0.56` 自适应））、导出导入（复制 + 预检/写入）；自绘 inline SVG 图标与状态徽标；启动先 `GET /lattice-panel/version` 自检，失败显示宿主未响应提示 |
+
+**路由排障（2026-11-02 追加）**：重启后 `/lattice-panel/*` 仍 404/405，判定为宿主侧路由未生效。`src/index.js` 增加 `bootLog()`（写入 `$DSH_HOME/lattice/boot.log`：`apply: start`、`panel: registered prefix …`、`apply: ready`、异常栈）与 `mountPanelRoutes` 双通道：优先 `resolveWebServer`（`ctx.get("webServer") ?? ctx.webServer`）直接注册，失败再回落 `ctx.inject(["webServer"])`；两种路径各写一条 boot 日志，供下次重启判读。
+
+**面板收尾（2026-11-02 追加）**：新增「捕获」tab（`/lattice-panel/captures`，候选列表 + 接受为 draft / 丢弃）；新增「清除记忆库」危险操作（浏览 tab 底部红色区块 → 30 秒倒计时警告弹窗，取消即中止；`POST /lattice-panel/clear` 要求 `confirm: true`，`readOnly` 时 409；宿主删除库内全部 `entries/*.md` 并调用 `clearEntriesCache()` 让下一轮读取立即生效；保留库目录与 `projects.json`，不影响 capture 队列）。
+
+**M8 备份与矩阵缩放（2026-11-02 追加）**：新增 `src/backup.js`——备份 = 库根目录快照到 `<backup.dir>/lattice-YYYYMMDD-HHmmss[-<自定义名称>]/`（复制 `entries/*.md`、`projects.json`、`.lattice-root.json`，写 `manifest.json` 记录来源、名称与条目 id 列表），按 `backup.keep`（默认 10）保留最新 N 份并清理更旧的；`backup.dir` 为空时默认到**插件安装位置旁边的 `backups/`**：`defaultBackupDir()` 用 `pluginInstallDir()` 在 `<DSH_HOME>/profiles/*/node_modules/dsh-lattice-memory`（含 `link:` 符号链接）中定位插件实际安装的 profile，返回 `<profile>/backups`；找不到时回退 `$DSH_HOME/lattice/backups`。**注意不要跟随 link 的实体路径**：DSH 用 `link:` 安装时插件包目录就是用户的项目 checkout，备份写那里会污染项目；相对路径仍相对插件根解析。面板接口 `GET/POST /lattice-panel/backup`（GET 返回默认目录、当前目录、最近备份列表；POST `{dir?, keep?, name?}` 立即备份，`readOnly` 不影响——备份是只读操作）。**恢复备份**：`POST /lattice-panel/restore` `{name}`——从选中的备份把 `entries/*.md` 覆盖回库、恢复 `projects.json`/`.lattice-root.json`，清条目缓存；只覆盖同名文件，不删除备份后新增的条目；`readOnly=true` 时 409。**目录选择**：`POST /lattice-panel/pick-directory` 由宿主解析 `ctx.get("directoryPicker")` 的 capability，native 时直接弹系统目录选择器并返回路径（browse-only 或取不到时返回空串，client 再回退到 `ctx.uiWorkspace.pickDirectory()` / `ctx.remote.directoryPicker.pick()`）。浏览 tab 顶部新增「备份记忆库」行（目录输入 + 选择文件夹 + 用默认（点击后把默认目录直接填进输入框，而不是清空）+ 自定义名称 + 立即备份 + 备份总数与下拉选择 + 恢复所选备份…带确认框）。矩阵 3D 视图新增「＋/－」缩放按钮，与滚轮共用 `dist` 限位 1.2–9。**滚轮缩放修复（2026-11-02 追加）**：3D 场景在数据加载前不渲染（`matrixRows.length === 0` 时显示空状态），而滚轮监听 effect 的依赖只有 `[]`，首次挂载时 `wrapRef.current` 还是 null，导致监听器永远没绑上；现改为把监听器挂在始终存在的 wrapper 上并把 `data` 加入依赖，数据到达后自动重绑，滚轮与按钮都生效。
+
+**面板收尾 ②（2026-11-02 追加）**：`GET /backup` 新增 `packageDir`（`pluginPackageDir()` = `realpath(<profile>/node_modules/dsh-lattice-memory)`），面板把「插件安装位置」与「插件包实体」分开显示——`link:` 安装时实体路径就是用户项目 checkout，只展示、不作默认备份目录；新增 `POST /lattice-panel/compose`（标题/feature 必填，kind 默认 note，id 由标题 slug 或 `memory-<时间>` 生成，走 `normalizeEntry` + `rejectSecrets` + id 冲突 + 近似重复校验，`saveEntry` 后 `clearEntriesCache()`），「导出/导入」tab 底部新增「写一条记忆」表单；`PANEL_ENDPOINTS` 加 `compose` 并按新增接口顺序更新。
+| `scripts/selftest.mjs` | 新增 portable 断言（三种导出产物、roundtrip 导入、id 冲突、近重复、凭证、非法记录） |
+
+**设计取舍**
+- 导出只读共享库、不含 overlay：项目本地经验不外流；导入只写共享库，避免把别人的 overlay 混进来。
+- 导入默认 `dry_run` 且永不覆盖已有 id：导入失败可预期，冲突显式列出而不是静默跳过或覆盖。
+- SKILL.md 用 YAML frontmatter（`name: lattice-memory`）+ 按 feature 分节，能被 skills 扫描根直接加载；AGENTS.md 输出纯 Markdown 片段，便于粘贴进没有 Lattice 的环境。
+- 面板数据走同源 HTTP 路由复用宿主栅栏，而不是另起 IPC 通道；因此桌面端与 web 端行为一致，且不需要额外信任配置。
+- 面板主入口放在对话页头部（`conversation.session.header.utilities`）浮层抽屉：随时可开、不打断对话；设置页分节保留作为第二入口（用户 2026-11-02 要求把入口从设置里挪出来）。
+
+**已知限制**
+- 面板检索/矩阵用宿主进程工作区（无参数时 `process.cwd()` → DSH 安装目录），想看某项目的维度需从该项目的会话里调用工具；面板暂不支持指定工作区路径。
+- 导入的 session-search 候选（原计划）未做，只支持 Lattice JSON；`lattice_export` 不写文件，内容由调用方自己保存（面板提供复制）。
+- 面板未做虚拟滚动，条目上千时浏览列表会变慢（检索与矩阵是分页/聚合的，不受影响）。
+
+
+**M4 已知限制**：缓存键不含文件内容哈希（极端情况下同 size 同 mtime 的改写可能漏检，概率可忽略）；`projects.json` 尚无 UI 编辑入口；缓存不跨进程共享（每次 DSH 启动重建，符合预期）。
+
+## 附录 F：M6 落地记录（2026-11-02，待重启实测）
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/capture.js`（新增） | `CAPTURE_LIMITS`（`maxPending=5`、`errorChars=320`、`forgetAfterMs=30min`）；候选队列 `<stateDir>/captures.json`：`readCaptureQueue` / `writeCaptureQueue`（tmp+rename 原子写）/ `listCandidates` / `findCandidate` / `addCandidate`（同工具+同首行错误合并计数，超 `maxPending` 丢最旧）/ `removeCandidates`；`errorStem`（首行错误，用于标题/摘要/去重）、`extractErrorText`（content 文本块 / value / error.message）；`createCaptureTracker({forgetAfterMs})` 只观察 `(exec, result, now)`：失败记入 `agent::tool`，同 agent 同工具成功后返回 `{tool, errorText, failedAt, recoveredAt}`，`lattice_*` 工具与其它 agent 不配对，超时失败自动遗忘；`buildCandidate({hit,dims,workspace,now})` 生成 gotcha 候选（中文标题「自动捕获：<tool> 先失败、后成功（待补充修复步骤）」，body 含失败原文 + 待补充 + 验收口径，evidence 写 `run:<tool>` 和 `file:<workspace>`） |
+| `src/index.js` | Config 新增 `capture.enabled`（默认 true）/ `capture.mode`（`notify` 默认 / `draft`）/ `capture.maxPending`；`resolveConfig` 同步；`storeCandidate(config, candidate, overrides)`（readOnly 拒绝、密钥扫描、id 冲突、Jaccard 近重复拒写、落 draft+low，id 形如 `capture-<suffix>`）；`captureTool`（`lattice_capture`：action=list/accept/discard、id/all、可覆盖 title/kind/feature/summary/body/evidence/dims/tags，accept 返回写入文件列表）；`attachCapture(ctx, config)` 用 `ctx.effect(() => ctx.on("tools/result", onResult))` 挂监听，失败→重试成功后按 `capture.mode` 直接写 draft 或入队，整体 try/catch 保证绝不打断工具执行；`renderPromptSection` 在队列非空时追加一行待确认提醒；15 个工具注册 |
+| `scripts/selftest.mjs` | 新增 capture 断言：失败+同 agent 重试成功配对、`errorStem`、`buildCandidate` 字段（kind/feature/dims/evidence/title/body）、跨 agent 不配对、`lattice_*` 不捕获、超时遗忘 |
+| `README.md` / `PLAN.md` | 进度、工具表、配置项、新增「半自动捕获（M6）」章节、文件分工、路线图与本事录 |
+
+**设计取舍**
+- 只做"失败→重试成功"这一种可验证信号：它能证明"某条路不通、后来走通了"，但无法自动知道修好的是什么，所以候选正文明确写"待补充"，强制模型改写后再 `verify`。
+- 默认 `notify` 而不是 `draft`：自动写库容易产生错误结论与噪音；用户 2026-11-02 明确要求先做半自动。
+- 候选队列落 `<stateDir>` 而不是库根：队列是插件运行状态，不属于记忆库内容；库导出/分享不会带上未确认候选。
+- accept 复用 `lattice_record` 的校验路径（readOnly / 密钥 / id 冲突 / 近重复），避免第二条写入通道绕过安全阀。
+
+**已知限制**：只能识别工具级失败（模型推理走错路但工具都成功的情况捕获不到）；不做"用户纠正"识别与跨轮链路归因（属全自动 M7 范畴）；候选上限 5 条，超出丢最旧；`lattice_capture` 一次 accept 多个候选时只要有一个校验失败就整体报错（前面的已写入属部分成功）。
+
+## 附录 G：M7 落地记录（2026-11-02，已实测通过）
+
+**验收实测（2026-11-02）**：`read F:\温迪\dsh-lattice-memory\quickstart-broken-path.md` 失败 → 用户回「不对，应该先读 README.md」→ `read README.md` 成功 → `lattice_capture list` 出现候选「自动捕获：用户纠正后 read 才成功」，正文含 `> 不对，应该先读 README.md`，evidence 3 条（`run:read (auto-captured user-correction at …)`、`run:user-correction (quoted in the body)`、`file:F:\温迪`），reason=`user-correction`。由此定位并修复：原先 `turn/end` 直接丢弃未纠正失败，导致"跨轮纠正"永远捕获不到；现改为窗口期内保留（`capture.incidentMinutes`），仅在超窗时丢弃。
+
+| 文件 | 内容 |
+| --- | --- |
+| `src/capture.js`（扩展） | 新增 `looksLikeCorrection`（中英纠正用语表）、`messageText`（字符串 content 或 text 块数组 → 纯文本）、`createSessionCaptureTracker({forgetAfterMs, maxIncidents, maxAttempts})`：按会话隔离；`recordTool({sessionKey, tool, isError, errorText, now})` 记录每次工具结果（`lattice_*` 忽略），失败开 incident（同工具合并 count），同工具成功或"带纠正的 incident 被任意成功"时关闭并返回 `recovered`；`userMessage({sessionKey, text, now})` 只在命中纠正用语且有未恢复 incident 时把这句话挂上去（每条 incident 最多 3 句）；`endTurn({sessionKey, now})` 收敛：有纠正的 incident 即使没有后续成功也返回（`reason: "user-correction"`），没纠正也没恢复的直接丢弃；`buildIncidentCandidate({incident, dims, workspace, now})` 生成候选（标题区分 用户纠正/失败后找回/先失败后成功，body 含失败原文 + `> 用户纠正` 引用 + 待补充 + 验收口径；evidence `run:<tool>` + `run:user-correction` + `file:<workspace>`） |
+| `src/index.js` | Config：`capture.mode` 接受 `notify \| draft \| auto`；新增 `capture.detectUserCorrections`（默认 true）与 `capture.incidentMinutes`（默认 10，映射到 tracker 的 `forgetAfterMs`）。`attachCapture` 重写：`tools/result` 用会话 key（`exec.agent.session.id`）记录工具结果并发布恢复的 incident；新增 `ctx.on("session/event", …)`：`user/message` 且 `source.kind === "user"` 时调用 `tracker.userMessage`，`turn/end` 时 `tracker.endTurn` 并发布；发布逻辑 `publish(incident, workspace)`：`mode !== "notify"` → `storeCandidate`（失败回落队列），否则 `addCandidate`；两处 handler 均整体 try/catch，绝不打断工具执行或会话管线；提示段文案改为「Memory capture (M7) … pending candidate(s) from recent tool failures / human corrections」 |
+| `scripts/selftest.mjs` | 新增 M7 断言：失败→纠正挂接→同工具成功收敛为 `user-correction` 且候选正文含纠正原文、evidence 3 条；普通闲聊不挂接；未恢复未纠正的失败在 `endTurn` 被丢弃；带纠正的 incident 即使没有后续成功也在 `endTurn` 返回；会话隔离；重复 `endTurn` 不重复返回 |
+| `README.md` / `PLAN.md` | 进度行/版本表/进度行/路线图加 M7；README「自动捕获（M6/M7）」章节重写（宿主侧 M6/M7 两段、纠正用语、模式说明）；配置示例加 `detectUserCorrections` / `incidentMinutes`；文件分工与本事录 |
+
+**设计取舍**
+- 用户纠正只在"已有未恢复失败"时挂接：没有失败时随口一句"其实可以…"不生成记忆，避免把普通讨论误记为踩坑。
+- `turn/end` 收敛而不在每条消息上即时写入：一轮结束时才能判断"失败后来到底修好了没有"，也能把同一轮的多条信号合成一条候选。
+- 被纠正但从未成功的失败仍然捕获（`user-correction`）：人明确指出哪里不对，本身就是可复用的经验；正文注明"未验证修复"。
+- 默认仍 `notify`；`auto` 供愿意接受 draft 噪音的用户显式开启（清掉一个 draft 的成本远低于漏记）。
+
+
+

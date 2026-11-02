@@ -7,3 +7,12 @@ coverage/
 
 # Local library fixtures used while developing
 .lattice-local/
+
+# Default backup destination (M8): library snapshots are local data
+backups/
+
+# Working plan / internal design notes: kept locally, not published
+PLAN.md
+
+# Sample entries used while developing: local templates, not published
+examples/
